@@ -1,0 +1,7 @@
+Django>=5.2.13
+djangorestframework>=3.17.1
+psycopg2-binary>=2.9.11
+PyJWT>=2.12.1
+python-dotenv>=1.2.2
+Pillow>=11.0.0
+bcrypt>=4.0.0
