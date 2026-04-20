@@ -9,7 +9,6 @@ export default function SuperAdminDashboard() {
         <PageHeader
           eyebrow="Super admin"
           title="Saari companies"
-          subtitle="Nayi company banao, phir dropdown se kisi company me member seedha yahan se add karo."
           showLogout
           logoutClassName="border-slate-300 text-slate-800 hover:bg-slate-100 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-800"
         />

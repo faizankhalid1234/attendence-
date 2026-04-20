@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, readJsonSafe } from "@/lib/api";
 import StatusBarChart from "@/app/components/charts/StatusBarChart";
 import SummaryPie from "@/app/components/charts/SummaryPie";
 import type { DayStatus } from "@/lib/attendanceSeries";
@@ -30,7 +30,14 @@ export default function CompanyTeamAttendance() {
   const load = useCallback(async () => {
     setError("");
     const res = await apiFetch(`/api/company/attendance-reports?days=${days}`);
-    const data = await res.json();
+    const data =
+      (await readJsonSafe<{
+        members?: ReportMember[];
+        timezone?: string;
+        startDate?: string;
+        endDate?: string;
+        error?: string;
+      }>(res)) || {};
     if (!res.ok) {
       setError(data.error || "Could not load report.");
       setMembers([]);

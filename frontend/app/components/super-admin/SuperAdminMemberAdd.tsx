@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, readJsonSafe } from "@/lib/api";
 
 type Company = { id: string; name: string; email: string; membersCount: number };
 
@@ -15,11 +15,13 @@ export default function SuperAdminMemberAdd() {
   useEffect(() => {
     void (async () => {
       const res = await apiFetch("/api/super-admin/companies");
-      const data = await res.json();
+      const data = (await readJsonSafe<{ companies?: Company[]; error?: string }>(res)) || {};
       if (res.ok) {
         const list = (data.companies || []) as Company[];
         setCompanies(list);
         setCompanyId((prev) => prev || list[0]?.id || "");
+      } else {
+        setMessage(data.error || "Companies load nahi ho sakin. Backend server check karein.");
       }
     })();
   }, []);
@@ -36,7 +38,7 @@ export default function SuperAdminMemberAdd() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ companyId, name: name.trim(), email: email.trim().toLowerCase() }),
     });
-    const data = await res.json();
+    const data = (await readJsonSafe<{ error?: string; member?: { tempPassword?: string }; emailWarning?: string }>(res)) || {};
     if (!res.ok) {
       setMessage(data.error || "Member add nahi ho saka.");
       return;
@@ -47,7 +49,7 @@ export default function SuperAdminMemberAdd() {
     setName("");
     setEmail("");
     const r2 = await apiFetch("/api/super-admin/companies");
-    const d2 = await r2.json();
+    const d2 = (await readJsonSafe<{ companies?: Company[] }>(r2)) || {};
     if (r2.ok) setCompanies(d2.companies || []);
   };
 

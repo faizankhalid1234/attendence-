@@ -10,7 +10,6 @@ export default function CompanyDashboard() {
         <PageHeader
           eyebrow="Company admin"
           title="Company dashboard"
-          subtitle="Sirf apni company — team reports alag fields (khulasa, member chayan, columns). Doosri companies ka data yahan nahi."
           showLogout
           logoutClassName="border-emerald-300 text-emerald-950 hover:bg-emerald-100 dark:border-emerald-800 dark:text-emerald-100 dark:hover:bg-emerald-950/40"
         />

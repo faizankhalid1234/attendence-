@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, readJsonSafe } from "@/lib/api";
 import { L } from "@/lib/attendanceLabels";
 import StatusBarChart from "@/app/components/charts/StatusBarChart";
 import SummaryPie from "@/app/components/charts/SummaryPie";
@@ -187,7 +187,7 @@ export default function AttendancePanel() {
   const load = useCallback(async () => {
     setLoadError("");
     const res = await apiFetch("/api/member/attendance");
-    const data = (await res.json()) as {
+    const data = ((await readJsonSafe(res)) || {}) as {
       history?: Row[];
       company?: CompanyRules;
       companies?: CompanyOption[];
@@ -335,7 +335,7 @@ export default function AttendancePanel() {
           const res = await apiFetch(
             `/api/member/location-label?latitude=${encodeURIComponent(String(next.lat))}&longitude=${encodeURIComponent(String(next.lng))}`,
           );
-          const data = (await res.json()) as {
+          const data = ((await readJsonSafe(res)) || {}) as {
             label?: string;
             displayName?: string;
             distanceFromRegisteredOfficeMeters?: number;
@@ -389,14 +389,7 @@ export default function AttendancePanel() {
     form.append("photo", photoFile, photoFile.name);
 
     const res = await apiFetch("/api/member/attendance", { method: "POST", body: form });
-    let data: Record<string, unknown> = {};
-    try {
-      data = (await res.json()) as Record<string, unknown>;
-    } catch {
-      setMessage("Could not read the server response.");
-      setLoading(false);
-      return;
-    }
+    const data = ((await readJsonSafe(res)) || {}) as Record<string, unknown>;
     setLoading(false);
     if (!res.ok) {
       const hint = typeof data.hint === "string" ? data.hint : "";

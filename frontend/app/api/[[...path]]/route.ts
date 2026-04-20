@@ -29,11 +29,21 @@ async function proxy(req: NextRequest, pathSegments: string[] | undefined) {
   const hasBody = !["GET", "HEAD"].includes(req.method);
   const body: ArrayBuffer | undefined = hasBody ? await req.arrayBuffer() : undefined;
 
-  const upstream = await fetch(target, {
-    method: req.method,
-    headers,
-    body: body && body.byteLength > 0 ? body : undefined,
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(target, {
+      method: req.method,
+      headers,
+      body: body && body.byteLength > 0 ? body : undefined,
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        error: "Backend service is unavailable. Start backend server at http://127.0.0.1:4000.",
+      },
+      { status: 503 },
+    );
+  }
 
   const buf = await upstream.arrayBuffer();
   const res = new NextResponse(buf, {
