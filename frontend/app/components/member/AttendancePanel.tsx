@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiFetch, readJsonSafe } from "@/lib/api";
 import { L } from "@/lib/attendanceLabels";
 import StatusBarChart from "@/app/components/charts/StatusBarChart";
@@ -32,74 +32,152 @@ type Row = {
 
 type GpsPhase = "none" | "getting" | "ready";
 
-/** First GPS fix can be wrong indoors — sample for a few seconds and keep the best-accuracy reading. */
-function acquireBestGpsFix(maxWaitMs: number): Promise<{ lat: number; lng: number; acc?: number }> {
+type LocationHelpKind = "permission" | "services" | "timeout" | "unsupported" | "unknown";
+
+function classifyLocationError(err: unknown): LocationHelpKind {
+  if (err instanceof Error && err.message === "no geolocation") return "unsupported";
+  const geoErr = err as GeolocationPositionError | undefined;
+  if (geoErr && typeof geoErr.code === "number") {
+    if (geoErr.code === 1) return "permission";
+    if (geoErr.code === 2) return "services";
+    if (geoErr.code === 3) return "timeout";
+  }
+  return "unknown";
+}
+
+type SavedMemberGps = {
+  companyId: string;
+  lat: number;
+  lng: number;
+  acc?: number;
+  label: string;
+  detail: string;
+  savedAt: number;
+};
+
+const GPS_SESSION_PREFIX = "attendance_member_live_gps:";
+const GPS_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const MOBILE_LOC_TIP_KEY = "attendance_mobile_location_tip_dismissed_v1";
+
+function gpsSessionKey(companyId: string) {
+  return `${GPS_SESSION_PREFIX}${companyId}`;
+}
+
+function readGpsSession(companyId: string | undefined): SavedMemberGps | null {
+  if (typeof window === "undefined" || !companyId) return null;
+  try {
+    const raw = sessionStorage.getItem(gpsSessionKey(companyId));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as SavedMemberGps;
+    if (!v || String(v.companyId) !== String(companyId)) return null;
+    if (typeof v.lat !== "number" || typeof v.lng !== "number") return null;
+    if (Date.now() - (v.savedAt || 0) > GPS_SESSION_MAX_AGE_MS) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+function writeGpsSession(payload: SavedMemberGps) {
+  try {
+    sessionStorage.setItem(gpsSessionKey(payload.companyId), JSON.stringify(payload));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+/** Human hint when GPS ring is wide — place name can be a nearby area, not exact plot. */
+function gpsAccuracyNote(acc: number | undefined | null): string | null {
+  if (acc == null) return null;
+  if (acc > 400) {
+    return "GPS accuracy bahut weak hai (±400m+). Attendance isi GPS point par save hogi — jagah ka naam map ka nazdeeki ilaqa ho sakta hai. Behtar ke liye khuli jagah par dubara Live GPS dabayein.";
+  }
+  if (acc > 200) {
+    return "GPS accuracy medium hai. Neeche wala naam OpenStreetMap ka is point ke qareeb ka address hai — agar lagta hai galat ilaqa hai to dubara Live GPS try karein (window / bahir).";
+  }
+  if (acc > 80) {
+    return "Chhoti GPS error ho sakti hai — naam thora aas paas ka area dikha sakta hai; lat/long hi aapka exact lock hai.";
+  }
+  return null;
+}
+
+function posToGps(pos: GeolocationPosition): { lat: number; lng: number; acc?: number } {
+  return {
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude,
+    acc: pos.coords.accuracy ?? undefined,
+  };
+}
+
+function pickBetterFix(a: GeolocationPosition, b: GeolocationPosition): GeolocationPosition {
+  const aa = a.coords.accuracy ?? 1e9;
+  const bb = b.coords.accuracy ?? 1e9;
+  return bb < aa ? b : a;
+}
+
+/**
+ * Live device fix: fresh read (`maximumAge: 0`). If accuracy is weak (common indoors / Wi‑Fi),
+ * briefly samples `watchPosition` and keeps the **tightest accuracy** reading — closer to where you actually are.
+ */
+function acquireRefinedLivePosition(totalTimeoutMs: number): Promise<{ lat: number; lng: number; acc?: number }> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("no geolocation"));
       return;
     }
-    const goodEnoughM = 50;
-    let best: GeolocationPosition | null = null;
-    let settled = false;
     const geo = navigator.geolocation;
-    let watchId = 0;
-    let timerId: number | undefined;
+    const firstTimeout = Math.max(5000, Math.min(totalTimeoutMs, 30000));
+    const goodEnoughM = 85;
+    const refineMaxMs = Math.min(6000, Math.max(2800, Math.floor(firstTimeout / 4)));
 
-    const cleanup = () => {
-      if (watchId) geo.clearWatch(watchId);
-      if (timerId !== undefined) window.clearTimeout(timerId);
-    };
-
-    const finish = (pos: GeolocationPosition) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        acc: pos.coords.accuracy ?? undefined,
-      });
-    };
-
-    watchId = geo.watchPosition(
-      (pos) => {
-        if (!best || (pos.coords.accuracy ?? 1e9) < (best.coords.accuracy ?? 1e9)) {
-          best = pos;
+    geo.getCurrentPosition(
+      (first) => {
+        const firstAcc = first.coords.accuracy ?? 1e9;
+        if (firstAcc <= goodEnoughM) {
+          resolve(posToGps(first));
+          return;
         }
-        const acc = pos.coords.accuracy;
-        if (acc != null && acc <= goodEnoughM) {
-          finish(pos);
-        }
-      },
-      (err) => {
-        if (settled) return;
-        if (!best) {
-          settled = true;
-          cleanup();
-          reject(err);
-        }
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: maxWaitMs + 4000 },
-    );
 
-    timerId = window.setTimeout(() => {
-      if (settled) return;
-      if (best) {
-        finish(best);
-        return;
-      }
-      geo.getCurrentPosition(
-        (pos) => finish(pos),
-        () => {
+        let best = first;
+        let settled = false;
+        let watchId: number | null = null;
+        let timerId: number | null = null;
+
+        const cleanup = () => {
+          if (watchId !== null) {
+            geo.clearWatch(watchId);
+            watchId = null;
+          }
+          if (timerId !== null) {
+            window.clearTimeout(timerId);
+            timerId = null;
+          }
+        };
+
+        const finish = () => {
           if (settled) return;
           settled = true;
           cleanup();
-          reject(new Error("timeout"));
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
-      );
-    }, maxWaitMs) as unknown as number;
+          resolve(posToGps(best));
+        };
+
+        watchId = geo.watchPosition(
+          (pos) => {
+            best = pickBetterFix(best, pos);
+            const acc = pos.coords.accuracy ?? 1e9;
+            if (acc <= 45) finish();
+          },
+          () => {
+            /* ignore transient watch errors */
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: refineMaxMs + 4000 },
+        ) as unknown as number;
+
+        timerId = window.setTimeout(finish, refineMaxMs) as unknown as number;
+      },
+      (err) => reject(err),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: firstTimeout },
+    );
   });
 }
 
@@ -169,13 +247,20 @@ export default function AttendancePanel() {
   const [gpsPhase, setGpsPhase] = useState<GpsPhase>("none");
   const [locationLabel, setLocationLabel] = useState("");
   const [locationDetail, setLocationDetail] = useState("");
-  const [officeDistanceM, setOfficeDistanceM] = useState<number | null>(null);
   const [locationLabelLoading, setLocationLabelLoading] = useState(false);
+  const [locationHelpOpen, setLocationHelpOpen] = useState(false);
+  const [locationHelpKind, setLocationHelpKind] = useState<LocationHelpKind>("unknown");
+  const [showMobileLocTip, setShowMobileLocTip] = useState(false);
+  const [locationQualityNote, setLocationQualityNote] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const getLocationRef = useRef<(opts?: { suppressRepeatedPermissionModal?: boolean }) => void>(() => {});
+  const retryGpsOnVisibleRef = useRef(false);
+  /** After "Allow this site location", avoid reopening the same modal in a loop if still blocked. */
+  const skipNextPermissionDeniedModalRef = useRef(false);
 
   const tz = company?.timezone || "Asia/Karachi";
 
@@ -214,6 +299,41 @@ export default function AttendancePanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    try {
+      const dismissed = sessionStorage.getItem(MOBILE_LOC_TIP_KEY);
+      const mobile = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setShowMobileLocTip(Boolean(mobile && !dismissed));
+    } catch {
+      setShowMobileLocTip(false);
+    }
+  }, []);
+
+  /** Restore last successful live GPS lock for this company (same browser tab session). */
+  useEffect(() => {
+    const id = company?.id;
+    if (!id) return;
+    const saved = readGpsSession(String(id));
+    if (!saved) return;
+    setCoords({ lat: saved.lat, lng: saved.lng, acc: saved.acc });
+    setLocationLabel(saved.label);
+    setLocationDetail(saved.detail);
+    setLocationQualityNote(gpsAccuracyNote(saved.acc));
+    setGpsPhase("ready");
+    setLocationLabelLoading(false);
+  }, [company?.id]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!retryGpsOnVisibleRef.current) return;
+      retryGpsOnVisibleRef.current = false;
+      getLocationRef.current();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   const stopCamera = () => {
     setCameraReady(false);
@@ -312,25 +432,57 @@ export default function AttendancePanel() {
     );
   };
 
-  const getLocation = () => {
-    setMessage("");
+  const openLocationHelp = (kind: LocationHelpKind) => {
+    setLocationHelpKind(kind);
+    setLocationHelpOpen(true);
+  };
+
+  const dismissMobileLocTip = () => {
+    try {
+      sessionStorage.setItem(MOBILE_LOC_TIP_KEY, "1");
+    } catch {
+      /* noop */
+    }
+    setShowMobileLocTip(false);
+  };
+
+  const getLocation = (options?: { suppressRepeatedPermissionModal?: boolean }) => {
+    const suppressRepeated = Boolean(options?.suppressRepeatedPermissionModal);
+    skipNextPermissionDeniedModalRef.current = suppressRepeated;
+
     if (!navigator.geolocation) {
-      setMessage("This browser does not support location.");
+      skipNextPermissionDeniedModalRef.current = false;
+      setMessage("");
+      setLocationHelpOpen(false);
+      setLocationQualityNote(null);
+      openLocationHelp("unsupported");
       return;
     }
+
+    const companyIdForSave = String(company?.id || selectedCompanyId || "");
+
+    // Register getCurrentPosition BEFORE any setState. Some mobile browsers only show
+    // the native Allow prompt if geolocation is requested in the same synchronous
+    // stack as the user tap — setState first can break that activation chain.
+    const pending = acquireRefinedLivePosition(20000);
+
+    setMessage("");
+    setLocationHelpOpen(false);
+    setLocationQualityNote(null);
+    retryGpsOnVisibleRef.current = false;
     setGpsPhase("getting");
     setLocationLabel("");
     setLocationDetail("");
-    setOfficeDistanceM(null);
     setLocationLabelLoading(false);
     setCoords(null);
 
-    void (async () => {
-      try {
-        const next = await acquireBestGpsFix(6500);
+    void pending
+      .then(async (next) => {
         setCoords(next);
         setGpsPhase("ready");
         setLocationLabelLoading(true);
+        let main = "";
+        let detail = "";
         try {
           const res = await apiFetch(
             `/api/member/location-label?latitude=${encodeURIComponent(String(next.lat))}&longitude=${encodeURIComponent(String(next.lng))}`,
@@ -338,31 +490,57 @@ export default function AttendancePanel() {
           const data = ((await readJsonSafe(res)) || {}) as {
             label?: string;
             displayName?: string;
-            distanceFromRegisteredOfficeMeters?: number;
+            latitude?: number;
+            longitude?: number;
           };
           const fallback = `${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`;
-          const main = res.ok && data.label?.trim() ? data.label.trim() : fallback;
-          setLocationLabel(main);
+          main = res.ok && data.label?.trim() ? data.label.trim() : fallback;
           const dn = data.displayName?.trim() || "";
-          setLocationDetail(dn && dn.toLowerCase() !== main.toLowerCase() ? dn : "");
-          setOfficeDistanceM(
-            typeof data.distanceFromRegisteredOfficeMeters === "number"
-              ? data.distanceFromRegisteredOfficeMeters
-              : null,
-          );
+          detail = dn && dn.toLowerCase() !== main.toLowerCase() ? dn : "";
+          setLocationLabel(main);
+          setLocationDetail(detail);
         } catch {
-          setLocationLabel(`${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`);
+          main = `${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`;
+          detail = "";
+          setLocationLabel(main);
           setLocationDetail("");
-          setOfficeDistanceM(null);
         } finally {
           setLocationLabelLoading(false);
         }
-      } catch {
+        setLocationQualityNote(gpsAccuracyNote(next.acc));
+        if (companyIdForSave) {
+          writeGpsSession({
+            companyId: companyIdForSave,
+            lat: next.lat,
+            lng: next.lng,
+            acc: next.acc,
+            label: main,
+            detail,
+            savedAt: Date.now(),
+          });
+        }
+        retryGpsOnVisibleRef.current = false;
+        skipNextPermissionDeniedModalRef.current = false;
+      })
+      .catch((err: unknown) => {
         setGpsPhase("none");
-        setMessage("Allow location permission — or try again near a window or outdoors.");
-      }
-    })();
+        const kind = classifyLocationError(err);
+        if (kind === "services" || kind === "timeout") {
+          retryGpsOnVisibleRef.current = true;
+        }
+        if (kind === "permission" && skipNextPermissionDeniedModalRef.current) {
+          skipNextPermissionDeniedModalRef.current = false;
+          setMessage(
+            "Site location abhi bhi allow nahi hui (ya pehle Block ho chuki hai). Address bar ka lock / info icon → Site settings → Location → Allow. Phir neeche \"Live GPS — location lock\" dubara dabayein.",
+          );
+          return;
+        }
+        skipNextPermissionDeniedModalRef.current = false;
+        openLocationHelp(kind);
+      });
   };
+
+  getLocationRef.current = getLocation;
 
   const markAttendance = async () => {
     setLoading(true);
@@ -425,8 +603,190 @@ export default function AttendancePanel() {
     [memberSummary],
   );
 
+  const locationHelpCopy: Record<LocationHelpKind, { title: string; body: ReactNode }> = {
+    permission: {
+      title: "Is site ko location allow karein",
+      body: (
+        <div className="space-y-3 text-sm leading-relaxed text-slate-600 dark:text-zinc-300">
+          <p>
+            <strong className="text-slate-800 dark:text-zinc-100">Allow this site location</strong> sirf browser se
+            ijazat mangta hai (native Allow / Block). Phone / laptop ki <strong>Location / GPS</strong> alag se ON honi
+            chahiye — phir hi sahi current point milta hai.
+          </p>
+          <p className="text-xs text-slate-500 dark:text-zinc-500">
+            Agar pehle <strong>Block</strong> kar diya tha to browser dubara bar bar popup nahi dikhata — site settings
+            se Allow karna padta hai; is button se dobara spam nahi hoga.
+          </p>
+          <details className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs dark:border-zinc-600 dark:bg-zinc-800/60">
+            <summary className="cursor-pointer font-semibold text-slate-800 dark:text-zinc-200">
+              Block / settings se kaise Allow karein?
+            </summary>
+            <ul className="mt-2 list-inside list-disc space-y-1.5 text-slate-700 dark:text-zinc-300">
+              <li>
+                <strong>Chrome / Edge:</strong> lock icon → Site settings → Location → <strong>Allow</strong> → refresh.
+              </li>
+              <li>
+                <strong>Firefox:</strong> permission icon → Location → Allow.
+              </li>
+              <li>
+                <strong>Safari:</strong> Settings → Safari → Location → Ask / Allow.
+              </li>
+            </ul>
+          </details>
+        </div>
+      ),
+    },
+    services: {
+      title: "Device par Location / GPS band hai",
+      body: (
+        <div className="space-y-3 text-sm text-slate-600 dark:text-zinc-300">
+          <p>
+            Browser theek hai, lekin system ne location fix nahi di. Apne phone / laptop par{" "}
+            <strong>Location services ON</strong> karein. Settings se wapas is tab par aate hi app{" "}
+            <strong>ek dafa khud</strong> location dubara read karne ki koshish karegi; warna{" "}
+            <strong>Live GPS</strong> dubara dabayein.
+          </p>
+          <ul className="list-inside list-disc space-y-1.5 text-slate-700 dark:text-zinc-200">
+            <li>
+              <strong>Android:</strong> Settings → Location → <strong>On</strong> (High accuracy / Google Location
+              Accuracy on rakhein).
+            </li>
+            <li>
+              <strong>iPhone:</strong> Settings → Privacy &amp; Security → Location Services → <strong>On</strong> →
+              Safari / Chrome me bhi Allow.
+            </li>
+            <li>
+              <strong>Windows:</strong> Settings → Privacy &amp; security → Location → Location services{" "}
+              <strong>On</strong>.
+            </li>
+          </ul>
+        </div>
+      ),
+    },
+    timeout: {
+      title: "Location abhi mili nahi (timeout)",
+      body: (
+        <p className="text-sm text-slate-600 dark:text-zinc-300">
+          Signal weak ho sakta hai — thodi der baad dubara try karein; behtar ke liye khuli jagah / window ke paas
+          khade ho kar <strong>Live GPS</strong> dubara dabayein.
+        </p>
+      ),
+    },
+    unsupported: {
+      title: "Is browser me location support nahi",
+      body: (
+        <p className="text-sm text-slate-600 dark:text-zinc-300">
+          Secure context (HTTPS / localhost) me Chrome / Edge / Safari try karein — ya browser update karein.
+        </p>
+      ),
+    },
+    unknown: {
+      title: "Location nahi mil saki",
+      body: (
+        <p className="text-sm text-slate-600 dark:text-zinc-300">
+          Neeche <strong>Allow this site location</strong> se dubara koshish karein. Phir bhi masla ho to phone ki
+          Location ON karein aur <strong>Live GPS</strong> dubara dabayein.
+        </p>
+      ),
+    },
+  };
+
+  const locationHelpPrimaryLabel =
+    locationHelpKind === "unsupported"
+      ? "Theek"
+      : locationHelpKind === "services" || locationHelpKind === "timeout"
+        ? "Dobara location lo"
+        : "Allow this site location";
+
+  const onLocationHelpPrimary = () => {
+    if (locationHelpKind === "unsupported") {
+      setLocationHelpOpen(false);
+      return;
+    }
+    // Do not setState here before getLocation — let getLocation register GPS first (same tap).
+    getLocation({
+      suppressRepeatedPermissionModal:
+        locationHelpKind === "permission" || locationHelpKind === "unknown",
+    });
+  };
+
   return (
     <div className="space-y-6">
+      {showMobileLocTip && !loadError && (
+        <div
+          role="alert"
+          className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 shadow-md dark:border-amber-600 dark:bg-amber-950/35"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-bold text-amber-950 dark:text-amber-100">Pehle location sahi ON karein (mobile web)</p>
+              <ol className="mt-2 list-inside list-decimal space-y-1.5 text-sm text-amber-950/95 dark:text-amber-100/95">
+                <li>Phone <strong>Settings → Location</strong> ON (High accuracy / Google Location Accuracy ON rakhein).</li>
+                <li>
+                  <strong>Live GPS</strong> dabate waqt browser ka popup aaye to <strong>Allow / While using the app</strong>{" "}
+                  zaroor choose karein.
+                </li>
+                <li>Mumkin ho to <strong>khuli jagah / window</strong> ke paas — taake current point sahi aaye.</li>
+              </ol>
+              <p className="mt-2 text-xs text-amber-900/90 dark:text-amber-200/90">
+                Attendance me <strong>lat / long wahi save</strong> hoti hai jo device deta hai; neeche wala naam map ka
+                nazdeeki pata ho sakta hai.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissMobileLocTip}
+              className="shrink-0 rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+            >
+              Samajh gaya
+            </button>
+          </div>
+        </div>
+      )}
+
+      {locationHelpOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-stretch justify-start bg-slate-900/55 px-3 pb-6 pt-3 backdrop-blur-md sm:items-center sm:justify-center sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="location-help-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLocationHelpOpen(false);
+          }}
+        >
+          <div
+            className="mx-auto max-h-[min(92vh,720px)] w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-zinc-600 dark:bg-zinc-900 sm:max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 px-5 pb-5 pt-6 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-100/90">Attendance</p>
+              <h2 id="location-help-title" className="mt-1 text-xl font-bold leading-snug">
+                {locationHelpCopy[locationHelpKind].title}
+              </h2>
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto px-5 py-4 sm:max-h-[45vh]">
+              {locationHelpCopy[locationHelpKind].body}
+            </div>
+            <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/90 p-4 dark:border-zinc-700 dark:bg-zinc-950/80">
+              <button
+                type="button"
+                onClick={onLocationHelpPrimary}
+                className="w-full rounded-2xl bg-indigo-600 py-3.5 text-center text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-500 active:scale-[0.99]"
+              >
+                {locationHelpPrimaryLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLocationHelpOpen(false)}
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loadError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{loadError}</div>
       )}
@@ -508,14 +868,16 @@ export default function AttendancePanel() {
 
         {gpsPhase === "none" && (
           <p className="mt-3 text-sm text-slate-600">
-            Tap <strong>Live GPS</strong> below — then you will see the <strong>place name</strong> and lock status here.
+            Tap <strong>Live GPS</strong> below — browser ka <strong>native</strong> prompt (Allow / Block) pehli dafa
+            aa sakta hai; <strong>Allow</strong> karein taake current location mile. Phir yahan place name dikhega.
           </p>
         )}
 
         {gpsPhase === "getting" && (
           <p className="mt-3 text-base font-medium text-slate-800">
-            Improving GPS fix (about 6–7 seconds) — hold the phone near a window or outdoors; the first fix near home
-            Wi‑Fi can be wrong, then it may settle to a more accurate office or street position.
+            Aapki <strong>live location</strong> le rahe hain (purani cache nahi). Agar pehla pin door lage to 2–6
+            second tak GPS thori refine hoti hai taake <strong>zyada sahi point</strong> save ho. Khuli jagah / window
+            behtar hai.
           </p>
         )}
 
@@ -524,32 +886,60 @@ export default function AttendancePanel() {
         )}
 
         {gpsPhase === "ready" && coords && !locationLabelLoading && (
-          <div className="mt-3 space-y-2">
-            <p className="text-xl font-bold leading-snug text-slate-900 sm:text-2xl">{locationLabel}</p>
-            {locationDetail && (
-              <p className="text-sm leading-relaxed text-slate-600" title={locationDetail}>
-                Full address (map): {locationDetail.length > 160 ? `${locationDetail.slice(0, 160)}…` : locationDetail}
+          <div className="mt-3 space-y-3">
+            <div className="rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-zinc-600 dark:bg-zinc-900/70">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                Device GPS point (attendance isi par save hoti hai)
               </p>
-            )}
-            <p className="text-sm font-semibold text-emerald-700">Live location is locked</p>
-            <p className="text-xs text-slate-500">
-              GPS: {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
-              {coords.acc != null ? ` · accuracy ±${Math.round(coords.acc)}m` : ""}
-            </p>
-            {officeDistanceM != null && (
-              <p className="text-xs font-medium text-indigo-800">
-                Approximate distance from company map pin: {officeDistanceM}m ({(officeDistanceM / 1000).toFixed(1)} km)
+              <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
+                Ye lat/lng <strong>phone / browser ki live reading</strong> hai — app khud coordinates nahi banati.
+                Weak GPS par ghar ke Wi‑Fi se pin door bhi aa sakta hai; dubara <strong>Live GPS</strong> bahir try
+                karein.
               </p>
-            )}
-            {coords.acc != null &&
-              coords.acc > 400 &&
-              officeDistanceM != null &&
-              officeDistanceM > 2500 && (
-                <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
-                  GPS accuracy is weak and you appear far from the office pin — the reading may still be an old home /
-                  Wi‑Fi fix. Tap &quot;Live GPS&quot; again or retry outdoors.
+              <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-900 dark:text-zinc-100">
+                {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
+              </p>
+              {coords.acc != null && (
+                <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
+                  Accuracy (device): ±{Math.round(coords.acc)}m — ye circle ke andar aap ho sakte hain.
                 </p>
               )}
+              <a
+                href={`https://www.openstreetmap.org/?mlat=${encodeURIComponent(String(coords.lat))}&mlon=${encodeURIComponent(String(coords.lng))}#map=19/${coords.lat}/${coords.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block text-sm font-semibold text-indigo-600 underline hover:text-indigo-500 dark:text-indigo-400"
+              >
+                Map par ye point khud check karein →
+              </a>
+            </div>
+
+            {locationQualityNote && (
+              <div
+                role="alert"
+                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
+              >
+                {locationQualityNote}
+              </div>
+            )}
+
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                Jagah ka naam (map — nazdeeki pata ho sakta hai)
+              </p>
+              <p className="mt-1 text-xl font-bold leading-snug text-slate-900 sm:text-2xl dark:text-white">
+                {locationLabel}
+              </p>
+            </div>
+            {locationDetail && (
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-zinc-400" title={locationDetail}>
+                <span className="font-semibold text-slate-700 dark:text-zinc-300">Poora pata: </span>
+                {locationDetail.length > 220 ? `${locationDetail.slice(0, 220)}…` : locationDetail}
+              </p>
+            )}
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+              Lock ho chuka — attendance inhi coordinates ke sath jayegi.
+            </p>
           </div>
         )}
       </section>
@@ -558,10 +948,10 @@ export default function AttendancePanel() {
         <button
           type="button"
           disabled={gpsPhase === "getting"}
-          onClick={getLocation}
+          onClick={() => getLocation()}
           className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow hover:bg-slate-800 disabled:opacity-60"
         >
-          {gpsPhase === "getting" ? "GPS fix..." : "Live GPS — location lock"}
+          {gpsPhase === "getting" ? "Getting location…" : "Live GPS — location lock"}
         </button>
       </div>
 
@@ -614,10 +1004,9 @@ export default function AttendancePanel() {
             <span className="font-semibold">
               {company.workStart} - {company.workEnd}
             </span>{" "}
-            ({company.timezone}) · Reference map radius:{" "}
-            <span className="font-semibold">{company.locationRadiusMeters}m</span>
+            ({company.timezone})
             <span className="block pt-1 text-xs font-normal text-slate-500">
-              Attendance uses your live location — you do not have to be inside the registered office radius.
+              Attendance aapki live location par hoti hai — user jahan bhi ho, location name capture ho jata hai.
             </span>
           </p>
         )}

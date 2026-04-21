@@ -126,6 +126,39 @@ def login(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def demo_login(_request):
+    demo_name = "Faizan"
+    demo_email = "faizandemo@yopmail.com"
+
+    user = User.objects.select_related("company").filter(email=demo_email).first()
+    if not user:
+        user = User.objects.create(
+            name=demo_name,
+            email=demo_email,
+            password_hash=hash_password(generate_password()),
+            role=Role.SUPER_ADMIN,
+            company=None,
+        )
+    elif user.role != Role.SUPER_ADMIN:
+        user.role = Role.SUPER_ADMIN
+        user.company = None
+        user.save(update_fields=["role", "company", "updated_at"])
+
+    token = make_token({"userId": str(user.id), "role": user.role, "companyId": None})
+    body = {
+        "message": "Demo login successful",
+        "role": user.role,
+        "userName": user.name,
+        "companyId": None,
+        "companyName": None,
+    }
+    response = JsonResponse(body)
+    set_auth_cookie(response, token)
+    return response
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def logout(_request):
     response = JsonResponse({"message": "Logged out"})
     clear_auth_cookie(response)
@@ -171,24 +204,27 @@ def super_admin_companies(request):
             status=400,
         )
     tz_name = tz_valid
-    radius_raw = body.get("locationRadiusMeters", 200)
     try:
         work_start = parse_hhmm(work_start_s)
         work_end = parse_hhmm(work_end_s)
-        office_lat = float(body.get("officeLatitude"))
-        office_lng = float(body.get("officeLongitude"))
-        location_radius_meters = int(radius_raw)
     except (ValueError, TypeError):
         return JsonResponse(
             {
-                "error": "workStart, workEnd (HH:MM), officeLatitude, officeLongitude, locationRadiusMeters zaroori hain.",
+                "error": "workStart aur workEnd (HH:MM) sahi format me hone chahiye.",
             },
             status=400,
         )
 
-    if not (-90 <= office_lat <= 90 and -180 <= office_lng <= 180):
-        return JsonResponse({"error": "Office latitude/longitude range galat hai."}, status=400)
-    if location_radius_meters < 20 or location_radius_meters > 5000:
+    try:
+        office_lat = float(body.get("officeLatitude", 24.860966))
+        office_lng = float(body.get("officeLongitude", 67.001100))
+        location_radius_meters = int(body.get("locationRadiusMeters", 200))
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Office latitude/longitude ya radius number format me hon."}, status=400)
+    if "officeLatitude" in body or "officeLongitude" in body:
+        if not (-90 <= office_lat <= 90 and -180 <= office_lng <= 180):
+            return JsonResponse({"error": "Office latitude/longitude range galat hai."}, status=400)
+    if "locationRadiusMeters" in body and (location_radius_meters < 20 or location_radius_meters > 5000):
         return JsonResponse({"error": "locationRadiusMeters 20 se 5000 ke beech hona chahiye."}, status=400)
 
     if not company_name or not company_email or not admin_name:
@@ -483,22 +519,13 @@ def member_location_label(request):
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return JsonResponse({"error": "range galat"}, status=400)
 
-    company_id = request.session_user.get("companyId")
-    distance_office_m = None
-    if company_id:
-        co = Company.objects.filter(id=company_id).first()
-        if co:
-            distance_office_m = int(
-                haversine_meters(lat, lng, float(co.office_latitude), float(co.office_longitude))
-            )
-
-    # zoom=18: road / POI level (16 often resolves to wrong suburb vs actual point)
+    # zoom=19: finer reverse result near the exact pin (label is still an approximation vs GPS error).
     params = urllib.parse.urlencode(
         {
             "lat": lat,
             "lon": lng,
             "format": "json",
-            "zoom": 18,
+            "zoom": 19,
             "addressdetails": 1,
             "accept-language": "en,ur",
         }
@@ -517,10 +544,15 @@ def member_location_label(request):
             payload = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, ValueError):
         short = f"{lat:.5f}, {lng:.5f}"
-        out = {"label": short, "shortAddress": short, "fallback": True}
-        if distance_office_m is not None:
-            out["distanceFromRegisteredOfficeMeters"] = distance_office_m
-        return JsonResponse(out)
+        return JsonResponse(
+            {
+                "label": short,
+                "shortAddress": short,
+                "fallback": True,
+                "latitude": lat,
+                "longitude": lng,
+            }
+        )
 
     addr = payload.get("address") or {}
     feat_name = (payload.get("name") or "").strip()
@@ -565,9 +597,9 @@ def member_location_label(request):
         "label": label,
         "displayName": payload.get("display_name"),
         "fallback": False,
+        "latitude": lat,
+        "longitude": lng,
     }
-    if distance_office_m is not None:
-        out["distanceFromRegisteredOfficeMeters"] = distance_office_m
     return JsonResponse(out)
 
 

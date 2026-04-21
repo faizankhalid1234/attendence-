@@ -59,9 +59,9 @@ export default function CompanySettingsPanel() {
         workStart,
         workEnd,
         timezone,
-        officeLatitude: Number(officeLatitude),
-        officeLongitude: Number(officeLongitude),
-        locationRadiusMeters: Number(locationRadiusMeters),
+        ...(officeLatitude.trim() ? { officeLatitude: Number(officeLatitude) } : {}),
+        ...(officeLongitude.trim() ? { officeLongitude: Number(officeLongitude) } : {}),
+        ...(locationRadiusMeters.trim() ? { locationRadiusMeters: Number(locationRadiusMeters) } : {}),
       }),
     });
     const data = await res.json();
@@ -75,7 +75,7 @@ export default function CompanySettingsPanel() {
 
   return (
     <div className="rounded-3xl border border-emerald-200/80 bg-[var(--card)] p-6 shadow-lg dark:border-emerald-900/50 dark:bg-zinc-900/80">
-      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Company timings & office location</h3>
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Company timings & optional map settings</h3>
       <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
         Attendance shift ke time window ke andar hi lag sakti hai; live GPS kahin se bhi ho sakti hai. Office map /
         radius sirf reference / reporting ke liye. Time format: 24-hour (browser &quot;time&quot; picker).
@@ -92,7 +92,7 @@ export default function CompanySettingsPanel() {
           <input
             type="time"
             step={60}
-            required
+            placeholder="Optional"
             value={workStart}
             onChange={(e) => setWorkStart(e.target.value)}
             className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
@@ -103,7 +103,7 @@ export default function CompanySettingsPanel() {
           <input
             type="time"
             step={60}
-            required
+            placeholder="Optional"
             value={workEnd}
             onChange={(e) => setWorkEnd(e.target.value)}
             className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
@@ -138,7 +138,7 @@ export default function CompanySettingsPanel() {
             className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
             value={officeLatitude}
             onChange={(e) => setOfficeLatitude(e.target.value)}
-            required
+            placeholder="Optional"
           />
         </div>
         <div>

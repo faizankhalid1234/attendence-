@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND = (process.env.BACKEND_URL || "http://127.0.0.1:4000").replace(/\/$/, "");
+const BACKEND_FALLBACK = "http://127.0.0.1:8000";
 
 const HOP_BY_HOP = new Set([
   "connection",
@@ -17,7 +18,6 @@ const HOP_BY_HOP = new Set([
 
 async function proxy(req: NextRequest, pathSegments: string[] | undefined) {
   const sub = pathSegments?.length ? pathSegments.join("/") : "";
-  const target = `${BACKEND}/api/${sub}${req.nextUrl.search}`;
 
   const headers = new Headers();
   req.headers.forEach((value, key) => {
@@ -29,17 +29,28 @@ async function proxy(req: NextRequest, pathSegments: string[] | undefined) {
   const hasBody = !["GET", "HEAD"].includes(req.method);
   const body: ArrayBuffer | undefined = hasBody ? await req.arrayBuffer() : undefined;
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(target, {
-      method: req.method,
-      headers,
-      body: body && body.byteLength > 0 ? body : undefined,
-    });
-  } catch {
+  const backends = [BACKEND, BACKEND_FALLBACK].filter((url, idx, arr) => arr.indexOf(url) === idx);
+  let upstream: Response | null = null;
+
+  for (const base of backends) {
+    const target = `${base}/api/${sub}${req.nextUrl.search}`;
+    try {
+      upstream = await fetch(target, {
+        method: req.method,
+        headers,
+        body: body && body.byteLength > 0 ? body : undefined,
+      });
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (!upstream) {
     return NextResponse.json(
       {
-        error: "Backend service is unavailable. Start backend server at http://127.0.0.1:4000.",
+        error:
+          "Backend service is unavailable. Start backend server at http://127.0.0.1:4000 or http://127.0.0.1:8000.",
       },
       { status: 503 },
     );

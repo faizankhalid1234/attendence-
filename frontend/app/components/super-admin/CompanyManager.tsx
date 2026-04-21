@@ -59,9 +59,9 @@ export default function CompanyManager() {
         workStart,
         workEnd,
         timezone,
-        officeLatitude: Number(officeLatitude),
-        officeLongitude: Number(officeLongitude),
-        locationRadiusMeters: Number(locationRadiusMeters),
+        ...(officeLatitude.trim() ? { officeLatitude: Number(officeLatitude) } : {}),
+        ...(officeLongitude.trim() ? { officeLongitude: Number(officeLongitude) } : {}),
+        ...(locationRadiusMeters.trim() ? { locationRadiusMeters: Number(locationRadiusMeters) } : {}),
       }),
     });
     const data = await res.json();
@@ -88,8 +88,8 @@ export default function CompanyManager() {
       >
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Create Company</h3>
         <p className="text-sm text-slate-500 dark:text-zinc-400">
-          Office map coordinates aur shift timings yahan set karein. Member shift window ke andar kahin se bhi live
-          location + photo se attendance laga sakta hai; radius ab enforce nahi hota.
+          Shift timings yahan set karein. Location fields optional hain. Member shift window ke andar kahin se bhi live
+          location + photo se attendance laga sakta hai.
         </p>
         <input
           className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
@@ -159,7 +159,7 @@ export default function CompanyManager() {
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
               value={officeLatitude}
               onChange={(e) => setOfficeLatitude(e.target.value)}
-              required
+              placeholder="Optional"
             />
           </div>
           <div>
@@ -168,7 +168,7 @@ export default function CompanyManager() {
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
               value={officeLongitude}
               onChange={(e) => setOfficeLongitude(e.target.value)}
-              required
+              placeholder="Optional"
             />
           </div>
         </div>
@@ -178,7 +178,7 @@ export default function CompanyManager() {
             className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
             value={locationRadiusMeters}
             onChange={(e) => setLocationRadiusMeters(e.target.value)}
-            required
+              placeholder="Optional"
           />
         </div>
         <button className="rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white shadow hover:bg-indigo-500">

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, readJsonSafe } from "@/lib/api";
 
 type LoginOk = {
   role: string;
@@ -17,32 +17,10 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [memberBanner, setMemberBanner] = useState<LoginOk | null>(null);
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setMemberBanner(null);
-
-    const res = await apiFetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.trim().toLowerCase(),
-        password,
-      }),
-    });
-
-    const data = (await res.json()) as LoginOk & { error?: string; debug_hint?: string };
-
-    if (!res.ok) {
-      setLoading(false);
-      const hint = data.debug_hint ? ` (${data.debug_hint})` : "";
-      setError((data.error || "Login failed") + hint);
-      return;
-    }
-
+  const handleLoginSuccess = (data: LoginOk) => {
     if (typeof window !== "undefined" && data.role === "MEMBER") {
       if (data.companyName) sessionStorage.setItem("memberCompanyName", String(data.companyName));
       else sessionStorage.removeItem("memberCompanyName");
@@ -51,8 +29,6 @@ export default function LoginForm() {
       if (data.companyId) sessionStorage.setItem("memberCompanyId", String(data.companyId));
       else sessionStorage.removeItem("memberCompanyId");
     }
-
-    setLoading(false);
 
     if (data.role === "SUPER_ADMIN") {
       router.push("/super-admin/dashboard");
@@ -80,6 +56,53 @@ export default function LoginForm() {
 
     router.push("/");
     router.refresh();
+  };
+
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setMemberBanner(null);
+
+    const res = await apiFetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+      }),
+    });
+
+    const data = ((await readJsonSafe(res)) || {}) as LoginOk & { error?: string; debug_hint?: string };
+
+    if (!res.ok) {
+      setLoading(false);
+      const hint = data.debug_hint ? ` (${data.debug_hint})` : "";
+      setError((data.error || "Login failed") + hint);
+      return;
+    }
+
+    setLoading(false);
+    handleLoginSuccess(data);
+  };
+
+  const onDemoLogin = async () => {
+    setDemoLoading(true);
+    setLoading(false);
+    setError("");
+    setMemberBanner(null);
+    setEmail("faizandemo@yopmail.com");
+
+    const res = await apiFetch("/api/auth/demo-login", { method: "POST" });
+    const data = ((await readJsonSafe(res)) || {}) as LoginOk & { error?: string; debug_hint?: string };
+    setDemoLoading(false);
+
+    if (!res.ok) {
+      const hint = data.debug_hint ? ` (${data.debug_hint})` : "";
+      setError((data.error || "Demo login failed") + hint);
+      return;
+    }
+    handleLoginSuccess(data);
   };
 
   return (
@@ -131,10 +154,18 @@ export default function LoginForm() {
 
       <button
         type="submit"
-        disabled={loading || !!memberBanner}
+        disabled={loading || demoLoading || !!memberBanner}
         className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white shadow-md transition hover:bg-indigo-500 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400"
       >
         {loading ? "Please wait..." : memberBanner ? "Redirecting..." : "Login"}
+      </button>
+      <button
+        type="button"
+        onClick={onDemoLogin}
+        disabled={loading || demoLoading || !!memberBanner}
+        className="w-full rounded-xl border border-indigo-300 bg-white px-4 py-3 font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-700 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-zinc-800"
+      >
+        {demoLoading ? "Opening demo..." : "Demo Login (Faizan)"}
       </button>
     </form>
   );
