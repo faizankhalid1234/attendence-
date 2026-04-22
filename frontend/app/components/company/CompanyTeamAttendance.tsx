@@ -46,7 +46,7 @@ export default function CompanyTeamAttendance() {
     const list = (data.members || []) as ReportMember[];
     setMembers(list);
     setTimezone(data.timezone || "");
-    setRange({ start: data.startDate, end: data.endDate });
+    setRange({ start: data.startDate || "", end: data.endDate || "" });
     setSelectedId((id) => {
       if (id && list.some((m) => m.id === id)) return id;
       return list[0]?.id || "";
