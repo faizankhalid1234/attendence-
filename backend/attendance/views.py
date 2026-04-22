@@ -673,9 +673,15 @@ def member_attendance(request):
 
     lat_s = request.POST.get("latitude")
     lng_s = request.POST.get("longitude")
+    posted_company_id = (request.POST.get("companyId") or "").strip()
     photo = request.FILES.get("photo")
     if not lat_s or not lng_s or not photo:
         return JsonResponse({"error": "latitude, longitude, aur live photo zaroori hain."}, status=400)
+    if posted_company_id and posted_company_id != str(company.id):
+        return JsonResponse(
+            {"error": "Aap sirf apni assigned company ki attendance mark kar sakte hain."},
+            status=403,
+        )
     try:
         lat = float(lat_s)
         lng = float(lng_s)

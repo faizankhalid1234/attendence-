@@ -1,6 +1,27 @@
+import type { Metadata } from "next";
 import LoginForm from "@/app/components/LoginForm";
 import JsonLd from "@/app/components/JsonLd";
 import { siteUrl } from "@/lib/site";
+
+export const metadata: Metadata = {
+  title: "Attendance Management Platform",
+  description:
+    "Attendance Mark helps teams track check-in and check-out with live GPS, camera proof, and role-based dashboards for members, company admins, and super admins.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Attendance Management Platform",
+    description:
+      "Track shift attendance with live GPS and camera check-in/check-out. Separate dashboards for members, company admins, and super admins.",
+    url: "/",
+  },
+  twitter: {
+    title: "Attendance Management Platform",
+    description:
+      "Track shift attendance with live GPS and camera check-in/check-out. Separate dashboards for members, company admins, and super admins.",
+  },
+};
 
 export default function Home() {
   const base = siteUrl();

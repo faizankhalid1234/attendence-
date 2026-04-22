@@ -290,6 +290,9 @@ export default function AttendancePanel() {
     const c = data.company || null;
     setCompany(c);
     let opts = Array.isArray(data.companies) ? data.companies.filter((x) => x?.id && x?.name) : [];
+    if (c?.id) {
+      opts = opts.filter((x) => String(x.id) === String(c.id));
+    }
     if (opts.length === 0 && c?.id && c?.name) opts = [{ id: String(c.id), name: String(c.name) }];
     setCompaniesList(opts);
     if (c?.id) setSelectedCompanyId(String(c.id));
@@ -561,7 +564,15 @@ export default function AttendancePanel() {
       return;
     }
 
+    const effectiveCompanyId = String(company?.id || selectedCompanyId || "");
+    if (!effectiveCompanyId) {
+      setMessage("Your company is missing on this account. Contact admin.");
+      setLoading(false);
+      return;
+    }
+
     const form = new FormData();
+    form.append("companyId", effectiveCompanyId);
     form.append("latitude", String(coords.lat));
     form.append("longitude", String(coords.lng));
     form.append("photo", photoFile, photoFile.name);
