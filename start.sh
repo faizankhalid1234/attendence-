@@ -1,6 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! python -c "import django" >/dev/null 2>&1; then
+  echo "[deploy] Django not found. Installing backend requirements..."
+  python -m pip install --no-cache-dir -r backend/requirements.txt
+fi
+
+if ! command -v gunicorn >/dev/null 2>&1; then
+  echo "[deploy] gunicorn not found. Installing backend requirements..."
+  python -m pip install --no-cache-dir -r backend/requirements.txt
+fi
+
+if [ ! -d "frontend/node_modules" ]; then
+  echo "[deploy] frontend/node_modules missing. Installing frontend dependencies..."
+  npm ci --prefix frontend
+fi
+
 echo "[deploy] Running Django migrations..."
 python backend/manage.py migrate --noinput
 
