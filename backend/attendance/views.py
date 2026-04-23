@@ -117,8 +117,34 @@ def login(request):
     user = next((u for u in candidates if verify_password(password, u.password_hash)), None)
     if not user:
         payload = {"error": "Invalid email or password"}
+        total_for_email = User.objects.filter(email__iexact=email).count()
+        has_company_admin = User.objects.filter(email__iexact=email, role=Role.COMPANY_ADMIN).exists()
+
+        if account_type in ("company", "company_admin", "owner"):
+            if not has_company_admin and total_for_email > 0:
+                payload["hint"] = (
+                    "Is email par company-admin account nahi hai — shayad pehle se sirf member (ya doosra role) hai. "
+                    "Django Admin mein nayi company ke liye wohi email use mat karo jo member par hai; "
+                    "ya Member login try karo."
+                )
+            elif not has_company_admin and total_for_email == 0 and Company.objects.filter(email__iexact=email).exists():
+                payload["hint"] = (
+                    "Company is email par DB mein hai lekin koi login-user nahi mila. "
+                    "Django Admin > Companies > is company ko edit karo, Company login password bharo, Save — phir dubara login try karo."
+                )
+            elif has_company_admin:
+                payload["hint"] = "Company-admin account milta hai lekin password match nahi hua — wahi password likho jo company add karte waqt Company login password mein diya tha (spaces/typos check)."
+        elif account_type in ("member", "staff", "employee", "team"):
+            has_member = User.objects.filter(email__iexact=email, role=Role.MEMBER).exists()
+            if not has_member and total_for_email > 0:
+                payload["hint"] = (
+                    "Is email par member account nahi hai — shayad company-admin email hai. "
+                    "Company login option try karein."
+                )
+            elif has_member:
+                payload["hint"] = "Member account mila lekin password match nahi hua — member ka password alag hota hai (company wala password yahan kaam nahi karega)."
+
         if django_settings.DEBUG:
-            total_for_email = User.objects.filter(email__iexact=email).count()
             if total_for_email == 0:
                 payload["debug_hint"] = "user_not_found"
             else:

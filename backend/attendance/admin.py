@@ -9,7 +9,7 @@ class CompanyAdminForm(forms.ModelForm):
         label="Company login password",
         required=False,
         widget=forms.PasswordInput(render_value=False),
-        help_text="Sirf nayi company: upar wali company email + ye password se frontend par login.",
+        help_text="Nayi company: zaroori. Purani company: khali chhoro — ya naya password bharo (company login fix/change).",
     )
 
     class Meta:
@@ -35,6 +35,19 @@ class CompanyAdminForm(forms.ModelForm):
         if not self.instance.pk:
             if not (cleaned.get("company_login_password") or "").strip():
                 raise forms.ValidationError("Nayi company ke liye company login password zaroori hai.")
+            email = (cleaned.get("email") or "").strip().lower()
+            if email:
+                conflict = (
+                    User.objects.filter(email__iexact=email)
+                    .exclude(role=Role.COMPANY_ADMIN)
+                    .exists()
+                )
+                if conflict:
+                    raise forms.ValidationError(
+                        "Ye email pehle se member ya doosre role par use ho rahi hai — "
+                        "is par company-admin login create nahi hota. Nayi company email choose karein, "
+                        "ya Django Admin > Users se us user ki email change / user hata dein."
+                    )
         return cleaned
 
 
@@ -50,14 +63,62 @@ class CompanyAdmin(admin.ModelAdmin):
     search_fields = ("name", "email")
     readonly_fields = ("created_at", "updated_at")
 
+    def _sync_company_login_user(self, request, obj, company_password: str) -> None:
+        """Company.email + password se COMPANY_ADMIN User create/update."""
+        display_name = (obj.name or "").strip() or obj.email
+        existing = User.objects.filter(email__iexact=obj.email).order_by("-created_at").first()
+        if existing:
+            if existing.role != Role.COMPANY_ADMIN:
+                self.message_user(
+                    request,
+                    f"{obj.email} par pehle se member/doosra role hai — company login set nahi kiya.",
+                    level=messages.WARNING,
+                )
+                return
+            existing.name = display_name
+            existing.password_hash = hash_password(company_password)
+            existing.company = obj
+            existing.save(update_fields=["name", "password_hash", "company", "updated_at"])
+            self.message_user(
+                request,
+                f"Company login update: {obj.email} (password form se).",
+                level=messages.SUCCESS,
+            )
+            return
+
+        User.objects.create(
+            name=display_name,
+            email=obj.email,
+            password_hash=hash_password(company_password),
+            role=Role.COMPANY_ADMIN,
+            company=obj,
+        )
+        mail_result = send_credentials_email(obj.email, display_name, company_password, "Company")
+        if mail_result.get("mocked"):
+            self.message_user(
+                request,
+                f"Company login ready: {obj.email}. SMTP off — wahi password jo form mein diya.",
+                level=messages.SUCCESS,
+            )
+        elif not mail_result.get("sent"):
+            self.message_user(
+                request,
+                f"Company login ready: {obj.email}. Email send fail: {mail_result.get('error', 'unknown')}",
+                level=messages.WARNING,
+            )
+        else:
+            self.message_user(
+                request,
+                f"Company login ready. {obj.email} par credentials bhej diye.",
+                level=messages.SUCCESS,
+            )
+
     def save_model(self, request, obj, form, change):
         is_new = obj.pk is None
         super().save_model(request, obj, form, change)
 
-        # Company create hote hi company login (COMPANY_ADMIN user) bhi set karo — email Company.email, password form se.
+        company_password = (form.cleaned_data.get("company_login_password") or "").strip()
         if is_new:
-            display_name = (obj.name or "").strip() or obj.email
-            company_password = (form.cleaned_data.get("company_login_password") or "").strip()
             if not company_password:
                 self.message_user(
                     request,
@@ -65,53 +126,10 @@ class CompanyAdmin(admin.ModelAdmin):
                     level=messages.ERROR,
                 )
                 return
-
-            existing = User.objects.filter(email=obj.email).order_by("-created_at").first()
-            if existing:
-                if existing.role != Role.COMPANY_ADMIN:
-                    self.message_user(
-                        request,
-                        f"Company ban gayi lekin {obj.email} par pehle se member/doosra role hai — company login set nahi kiya.",
-                        level=messages.WARNING,
-                    )
-                    return
-                existing.name = display_name
-                existing.password_hash = hash_password(company_password)
-                existing.company = obj
-                existing.save(update_fields=["name", "password_hash", "company", "updated_at"])
-                self.message_user(
-                    request,
-                    f"Company login update: {obj.email} (password form se).",
-                    level=messages.SUCCESS,
-                )
-                return
-
-            User.objects.create(
-                name=display_name,
-                email=obj.email,
-                password_hash=hash_password(company_password),
-                role=Role.COMPANY_ADMIN,
-                company=obj,
-            )
-            mail_result = send_credentials_email(obj.email, display_name, company_password, "Company")
-            if mail_result.get("mocked"):
-                self.message_user(
-                    request,
-                    f"Company login ready: {obj.email}. SMTP off — wahi password jo form mein diya.",
-                    level=messages.SUCCESS,
-                )
-            elif not mail_result.get("sent"):
-                self.message_user(
-                    request,
-                    f"Company login ready: {obj.email}. Email send fail: {mail_result.get('error', 'unknown')}",
-                    level=messages.WARNING,
-                )
-            else:
-                self.message_user(
-                    request,
-                    f"Company login ready. {obj.email} par credentials bhej diye.",
-                    level=messages.SUCCESS,
-                )
+            self._sync_company_login_user(request, obj, company_password)
+        elif company_password:
+            # Pehle se bani company jahan admin user miss ho gaya — edit par password se repair.
+            self._sync_company_login_user(request, obj, company_password)
 
 
 class UserAdminForm(forms.ModelForm):

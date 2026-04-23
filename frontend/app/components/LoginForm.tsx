@@ -13,7 +13,7 @@ type LoginOk = {
   demoMode?: boolean;
 };
 
-type LoginErr = { error?: string; debug_hint?: string; debug_note?: string };
+type LoginErr = { error?: string; debug_hint?: string; debug_note?: string; hint?: string };
 
 export default function LoginForm() {
   const router = useRouter();
@@ -91,7 +91,8 @@ export default function LoginForm() {
       setLoading(false);
       const hint = data.debug_hint ? ` (${data.debug_hint})` : "";
       const note = data.debug_note ? ` ${data.debug_note}` : "";
-      setError((data.error || "Login failed") + hint + note);
+      const friendly = data.hint ? `\n\n${data.hint}` : "";
+      setError((data.error || "Login failed") + hint + note + friendly);
       return;
     }
 
@@ -199,7 +200,7 @@ export default function LoginForm() {
       )}
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-300">
+        <p className="whitespace-pre-line rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-300">
           {error}
         </p>
       )}
