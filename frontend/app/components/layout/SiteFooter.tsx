@@ -84,8 +84,8 @@ export default function SiteFooter() {
             </li>
             <li>
               <strong className="text-slate-800 dark:text-zinc-100">2. Company Admin</strong> — Logs in with the
-              company email, sets shift times & timezone, adds team members, and views team attendance reports (only
-              their company&apos;s data).
+              company email, adds team members, and views team attendance reports (only their company&apos;s data).
+              Shift times and office reference are configured in Django Admin.
             </li>
             <li>
               <strong className="text-slate-800 dark:text-zinc-100">3. Member</strong> — Logs in, locks live GPS, takes
