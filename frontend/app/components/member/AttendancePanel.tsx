@@ -824,14 +824,13 @@ export default function AttendancePanel() {
       {(companiesList.length > 0 || displayCompanyName) && (
         <section className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-white p-5 shadow-sm">
           <label htmlFor="company-select" className="text-xs font-bold uppercase tracking-widest text-indigo-600">
-            Company for attendance
+            Your company
           </label>
-          {companiesList.length > 0 ? (
+          {!isDemoViewer && companiesList.length > 1 ? (
             <select
               id="company-select"
               value={selectedCompanyId}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
-              disabled={isDemoViewer}
               className="mt-2 w-full rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             >
               {companiesList.map((c) => (
@@ -846,7 +845,7 @@ export default function AttendancePanel() {
             </p>
           )}
           <p className="mt-2 text-xs text-slate-500">
-            Each member account is linked to one company — shift times below follow that company.
+            Members are linked to one company — shift times below follow that company.
           </p>
           {isDemoViewer && (
             <p className="mt-2 text-xs font-semibold text-amber-700">Demo mode: company selection and attendance submit are disabled.</p>

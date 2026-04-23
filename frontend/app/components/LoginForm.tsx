@@ -33,6 +33,14 @@ export default function LoginForm() {
       }
       if (data.demoMode) sessionStorage.setItem("memberDemoMode", "1");
       else sessionStorage.removeItem("memberDemoMode");
+
+      sessionStorage.setItem("portalRole", String(data.role));
+      if (data.companyName) sessionStorage.setItem("portalCompanyName", String(data.companyName));
+      else sessionStorage.removeItem("portalCompanyName");
+      if (data.userName) sessionStorage.setItem("portalUserName", String(data.userName));
+      else sessionStorage.removeItem("portalUserName");
+
+      window.dispatchEvent(new Event("portalRoleChanged"));
     }
 
     if (data.role === "SUPER_ADMIN") {

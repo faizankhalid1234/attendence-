@@ -1,19 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import ThemeToggle from "@/app/components/layout/ThemeToggle";
-
-const links = [
-  { href: "/", label: "Home" },
-  { href: "/member/dashboard", label: "Member" },
-  { href: "/company/dashboard", label: "Company" },
-  { href: "/super-admin/dashboard", label: "Super Admin" },
-];
+import PortalNav from "@/app/components/layout/PortalNav";
 
 export default function AppNavbar() {
-  const pathname = usePathname();
-
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-[var(--background)]/90 shadow-sm backdrop-blur-xl dark:border-zinc-800/90">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
@@ -39,28 +30,7 @@ export default function AppNavbar() {
           </div>
         </div>
 
-        <nav
-          className="flex min-w-0 w-full justify-center gap-0.5 overflow-x-auto rounded-full border border-slate-200/80 bg-white/70 p-1 shadow-inner dark:border-zinc-700/80 dark:bg-zinc-900/60 sm:flex-1 sm:px-2"
-          aria-label="Main"
-        >
-          {links.map(({ href, label }) => {
-            const active =
-              href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition sm:px-4 sm:text-sm ${
-                  active
-                    ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md dark:from-indigo-500 dark:to-violet-500"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                }`}
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+        <PortalNav />
 
         <div className="hidden shrink-0 sm:block">
           <ThemeToggle />

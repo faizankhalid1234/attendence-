@@ -10,6 +10,16 @@ export default function LogoutButton({ className = "" }: Props) {
 
   const onLogout = async () => {
     await apiFetch("/api/auth/logout", { method: "POST" });
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("memberCompanyName");
+      sessionStorage.removeItem("memberUserName");
+      sessionStorage.removeItem("memberCompanyId");
+      sessionStorage.removeItem("memberDemoMode");
+      sessionStorage.removeItem("portalRole");
+      sessionStorage.removeItem("portalCompanyName");
+      sessionStorage.removeItem("portalUserName");
+      window.dispatchEvent(new Event("portalRoleChanged"));
+    }
     router.push("/");
     router.refresh();
   };

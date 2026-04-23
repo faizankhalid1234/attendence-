@@ -272,7 +272,8 @@ def super_admin_companies(request):
 @require_http_methods(["POST"])
 @auth_required(Role.SUPER_ADMIN)
 def super_admin_members(request):
-    """Kisi bhi company me member add karein (company dropdown se)."""
+    """Deprecated: member creation is handled by company admins from the company dashboard."""
+    return JsonResponse({"error": "This endpoint is disabled. Add members from the company admin dashboard."}, status=410)
     body = parse_body(request)
     company_id = (body.get("companyId") or "").strip()
     name = (body.get("name") or "").strip()
