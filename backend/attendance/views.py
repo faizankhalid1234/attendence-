@@ -104,11 +104,12 @@ def login(request):
     if not email or not password:
         return JsonResponse({"error": "Invalid credentials payload"}, status=400)
 
-    user = User.objects.select_related("company").filter(email=email).first()
-    if not user or not verify_password(password, user.password_hash):
+    candidates = list(User.objects.select_related("company").filter(email=email).order_by("-created_at"))
+    user = next((u for u in candidates if verify_password(password, u.password_hash)), None)
+    if not user:
         payload = {"error": "Invalid email or password"}
         if django_settings.DEBUG:
-            payload["debug_hint"] = "user_not_found" if not user else "bad_password"
+            payload["debug_hint"] = "user_not_found" if not candidates else "bad_password"
         return JsonResponse(payload, status=401)
 
     token = make_token({"userId": str(user.id), "role": user.role, "companyId": str(user.company_id) if user.company_id else None})
@@ -232,9 +233,6 @@ def super_admin_companies(request):
 
     if not company_name or not company_email or not admin_name:
         return JsonResponse({"error": "Invalid payload"}, status=400)
-    if User.objects.filter(email=company_email).exists():
-        return JsonResponse({"error": "Email already exists"}, status=409)
-
     password = generate_password()
     company = Company.objects.create(
         name=company_name,
@@ -279,9 +277,6 @@ def super_admin_members(request):
     company = Company.objects.filter(id=company_id).first()
     if not company:
         return JsonResponse({"error": "Company nahi mili."}, status=404)
-    if User.objects.filter(email=email).exists():
-        return JsonResponse({"error": "Email pehle se registered hai."}, status=409)
-
     password = generate_password()
     member = User.objects.create(
         name=name,
@@ -330,9 +325,6 @@ def company_members(request):
     email = (body.get("email") or "").strip().lower()
     if not name or not email:
         return JsonResponse({"error": "Invalid payload"}, status=400)
-    if User.objects.filter(email=email).exists():
-        return JsonResponse({"error": "Email already exists"}, status=409)
-
     password = generate_password()
     member = User.objects.create(
         name=name,
