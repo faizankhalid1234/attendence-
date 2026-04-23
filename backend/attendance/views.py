@@ -100,27 +100,58 @@ def auth_required(*roles):
 def login(request):
     body = parse_body(request)
     email = (body.get("email") or "").strip().lower()
-    password = body.get("password") or ""
+    password = (body.get("password") or "").strip()
     if not email or not password:
         return JsonResponse({"error": "Invalid credentials payload"}, status=400)
 
-    candidates = list(User.objects.select_related("company").filter(email=email).order_by("-created_at"))
+    account_type = (body.get("accountType") or body.get("account_type") or "").strip().lower()
+    qs = User.objects.select_related("company").filter(email__iexact=email)
+    if account_type in ("company", "company_admin", "owner"):
+        qs = qs.filter(role=Role.COMPANY_ADMIN)
+    elif account_type in ("member", "staff", "employee", "team"):
+        qs = qs.filter(role=Role.MEMBER)
+    elif account_type in ("super", "super_admin", "superadmin"):
+        qs = qs.filter(role=Role.SUPER_ADMIN)
+
+    candidates = list(qs.order_by("-created_at"))
     user = next((u for u in candidates if verify_password(password, u.password_hash)), None)
     if not user:
         payload = {"error": "Invalid email or password"}
         if django_settings.DEBUG:
-            payload["debug_hint"] = "user_not_found" if not candidates else "bad_password"
+            total_for_email = User.objects.filter(email__iexact=email).count()
+            if total_for_email == 0:
+                payload["debug_hint"] = "user_not_found"
+            else:
+                payload["debug_hint"] = "bad_password"
+                if total_for_email > 1 and not account_type:
+                    payload["debug_note"] = (
+                        "Multiple users share this email — send accountType: "
+                        "\"company\" (company login) or \"member\" (staff) so the correct password is checked."
+                    )
+                elif total_for_email > 0 and account_type and not candidates:
+                    payload["debug_note"] = (
+                        f"No account for this email with accountType={account_type!r} — try the other type or omit accountType."
+                    )
         return JsonResponse(payload, status=401)
 
     token = make_token({"userId": str(user.id), "role": user.role, "companyId": str(user.company_id) if user.company_id else None})
-    body = {
+    login_payload = {
         "message": "Login successful",
         "role": user.role,
         "userName": user.name,
         "companyId": str(user.company_id) if user.company_id else None,
         "companyName": user.company.name if user.company_id else None,
+        "loginAs": (
+            "company"
+            if user.role == Role.COMPANY_ADMIN
+            else "member"
+            if user.role == Role.MEMBER
+            else "super_admin"
+            if user.role == Role.SUPER_ADMIN
+            else user.role
+        ),
     }
-    response = JsonResponse(body)
+    response = JsonResponse(login_payload)
     set_auth_cookie(response, token)
     return response
 

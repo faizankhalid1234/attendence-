@@ -6,16 +6,21 @@ import { apiFetch, readJsonSafe } from "@/lib/api";
 
 type LoginOk = {
   role: string;
+  loginAs?: string;
   userName?: string | null;
   companyName?: string | null;
   companyId?: string | null;
   demoMode?: boolean;
 };
 
+type LoginErr = { error?: string; debug_hint?: string; debug_note?: string };
+
 export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  /** Same email par company + member dono ho sakte hain — backend ko batane ke liye. */
+  const [loginAccount, setLoginAccount] = useState<"auto" | "company" | "member">("auto");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -67,21 +72,26 @@ export default function LoginForm() {
     setError("");
     setMemberBanner(null);
 
+    const payload: Record<string, string> = {
+      email: email.trim().toLowerCase(),
+      password: password.trim(),
+    };
+    if (loginAccount === "company") payload.accountType = "company";
+    if (loginAccount === "member") payload.accountType = "member";
+
     const res = await apiFetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.trim().toLowerCase(),
-        password,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const data = ((await readJsonSafe(res)) || {}) as LoginOk & { error?: string; debug_hint?: string };
+    const data = ((await readJsonSafe(res)) || {}) as LoginOk & LoginErr;
 
     if (!res.ok) {
       setLoading(false);
       const hint = data.debug_hint ? ` (${data.debug_hint})` : "";
-      setError((data.error || "Login failed") + hint);
+      const note = data.debug_note ? ` ${data.debug_note}` : "";
+      setError((data.error || "Login failed") + hint + note);
       return;
     }
 
@@ -131,6 +141,45 @@ export default function LoginForm() {
           required
         />
       </div>
+
+      <fieldset className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <legend className="px-1 text-xs font-medium text-slate-600 dark:text-zinc-400">Kaun sa account?</legend>
+        <p className="text-xs text-slate-600 dark:text-zinc-400">
+          Company banate waqt jo <strong>company email + company password</strong> diye thay, wahi yahan. Staff ke liye alag member password hota hai. Agar dono same email par hain to neeche sahi option chunein.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800 dark:text-zinc-200">
+            <input
+              type="radio"
+              name="loginAccount"
+              checked={loginAccount === "auto"}
+              onChange={() => setLoginAccount("auto")}
+              className="border-slate-400 text-indigo-600"
+            />
+            Auto (pehla matching password)
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800 dark:text-zinc-200">
+            <input
+              type="radio"
+              name="loginAccount"
+              checked={loginAccount === "company"}
+              onChange={() => setLoginAccount("company")}
+              className="border-slate-400 text-indigo-600"
+            />
+            Company login
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800 dark:text-zinc-200">
+            <input
+              type="radio"
+              name="loginAccount"
+              checked={loginAccount === "member"}
+              onChange={() => setLoginAccount("member")}
+              className="border-slate-400 text-indigo-600"
+            />
+            Member / staff
+          </label>
+        </div>
+      </fieldset>
 
       {memberBanner && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">

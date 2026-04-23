@@ -49,6 +49,11 @@ class Company(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.name
 
@@ -62,6 +67,11 @@ class User(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name="users")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.role})"
