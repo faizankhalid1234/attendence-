@@ -8,8 +8,8 @@ fi
 
 echo "[deploy] Installing backend requirements..."
 "${PYTHON_BIN}" -m ensurepip --upgrade >/dev/null 2>&1 || true
-"${PYTHON_BIN}" -m pip install --upgrade pip
-"${PYTHON_BIN}" -m pip install --no-cache-dir -r backend/requirements.txt
+"${PYTHON_BIN}" -m pip install --root-user-action=ignore --upgrade pip
+"${PYTHON_BIN}" -m pip install --root-user-action=ignore --no-cache-dir -r backend/requirements.txt
 
 if ! "${PYTHON_BIN}" -c "import django" >/dev/null 2>&1; then
   echo "[deploy] Django import still failing after install."
