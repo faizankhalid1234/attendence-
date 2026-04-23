@@ -127,6 +127,9 @@ def login(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def demo_login(_request):
+    if not django_settings.DEBUG:
+        return JsonResponse({"error": "Demo login is disabled."}, status=404)
+
     demo_name = "Faizan"
     demo_email = "faizandemo@yopmail.com"
 
