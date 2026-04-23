@@ -8,7 +8,7 @@ export default function SuperAdminDashboard() {
       <div className="mx-auto max-w-6xl space-y-8">
         <PageHeader
           eyebrow="Super admin"
-          title="Saari companies"
+          title="All Companies"
           showLogout
           logoutClassName="border-slate-300 text-slate-800 hover:bg-slate-100 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-800"
         />

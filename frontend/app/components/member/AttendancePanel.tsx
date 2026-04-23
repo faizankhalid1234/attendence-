@@ -252,6 +252,7 @@ export default function AttendancePanel() {
   const [locationHelpKind, setLocationHelpKind] = useState<LocationHelpKind>("unknown");
   const [showMobileLocTip, setShowMobileLocTip] = useState(false);
   const [locationQualityNote, setLocationQualityNote] = useState<string | null>(null);
+  const [isDemoViewer, setIsDemoViewer] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -276,6 +277,7 @@ export default function AttendancePanel() {
       history?: Row[];
       company?: CompanyRules;
       companies?: CompanyOption[];
+      demoMode?: boolean;
       error?: string;
     };
     if (!res.ok) {
@@ -287,6 +289,7 @@ export default function AttendancePanel() {
       return;
     }
     setHistory(data.history || []);
+    setIsDemoViewer(Boolean(data.demoMode));
     const c = data.company || null;
     setCompany(c);
     let opts = Array.isArray(data.companies) ? data.companies.filter((x) => x?.id && x?.name) : [];
@@ -548,6 +551,11 @@ export default function AttendancePanel() {
   const markAttendance = async () => {
     setLoading(true);
     setMessage("");
+    if (isDemoViewer) {
+      setMessage("Demo user is view-only. Attendance marking is disabled.");
+      setLoading(false);
+      return;
+    }
     if (!coords) {
       setMessage('Use "Live GPS — location lock" first to capture your location.');
       setLoading(false);
@@ -812,6 +820,7 @@ export default function AttendancePanel() {
               id="company-select"
               value={selectedCompanyId}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
+              disabled={isDemoViewer}
               className="mt-2 w-full rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             >
               {companiesList.map((c) => (
@@ -828,6 +837,9 @@ export default function AttendancePanel() {
           <p className="mt-2 text-xs text-slate-500">
             Each member account is linked to one company — shift times below follow that company.
           </p>
+          {isDemoViewer && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">Demo mode: company selection and attendance submit are disabled.</p>
+          )}
         </section>
       )}
 

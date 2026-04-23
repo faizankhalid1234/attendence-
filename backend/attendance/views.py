@@ -128,33 +128,38 @@ def login(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def demo_login(_request):
-    if not django_settings.DEBUG:
-        return JsonResponse({"error": "Demo login is disabled."}, status=404)
-
     demo_name = "Faizan"
     demo_email = "faizandemo@yopmail.com"
+    demo_company_name = "Demo Company"
 
+    company = Company.objects.filter(name=demo_company_name).first()
+    if not company:
+        company = Company.objects.create(
+            name=demo_company_name,
+            email="demo-company@attendance.local",
+        )
     user = User.objects.select_related("company").filter(email=demo_email).first()
     if not user:
         user = User.objects.create(
             name=demo_name,
             email=demo_email,
             password_hash=hash_password(generate_password()),
-            role=Role.SUPER_ADMIN,
-            company=None,
+            role=Role.MEMBER,
+            company=company,
         )
-    elif user.role != Role.SUPER_ADMIN:
-        user.role = Role.SUPER_ADMIN
-        user.company = None
+    elif user.role != Role.MEMBER or not user.company_id:
+        user.role = Role.MEMBER
+        user.company = company
         user.save(update_fields=["role", "company", "updated_at"])
 
-    token = make_token({"userId": str(user.id), "role": user.role, "companyId": None})
+    token = make_token({"userId": str(user.id), "role": user.role, "companyId": str(user.company_id) if user.company_id else None})
     body = {
         "message": "Demo login successful",
         "role": user.role,
         "userName": user.name,
-        "companyId": None,
-        "companyName": None,
+        "companyId": str(user.company_id) if user.company_id else None,
+        "companyName": user.company.name if user.company_id else None,
+        "demoMode": True,
     }
     response = JsonResponse(body)
     set_auth_cookie(response, token)
@@ -638,7 +643,10 @@ def member_attendance(request):
             "localToday": company_local_date(company, timezone.now()).isoformat(),
         }
         companies = [{"id": str(company.id), "name": company.name}]
-        return JsonResponse({"history": data, "company": company_payload, "companies": companies})
+        return JsonResponse({"history": data, "company": company_payload, "companies": companies, "demoMode": member.email == "faizandemo@yopmail.com"})
+
+    if member.email == "faizandemo@yopmail.com":
+        return JsonResponse({"error": "Demo user is view-only. Attendance marking is disabled."}, status=403)
 
     now = timezone.now()
     if not in_work_window(company, now):
