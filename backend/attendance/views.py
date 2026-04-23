@@ -97,18 +97,52 @@ def auth_required(*roles):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def _normalize_expected_role(raw: str) -> str | None:
+    r = (raw or "").strip().upper().replace("-", "_")
+    if r in ("COMPANY", "OWNER", "BUSINESS"):
+        return Role.COMPANY_ADMIN
+    if r in ("COMPANY_ADMIN", "ADMIN"):
+        return Role.COMPANY_ADMIN
+    if r in ("MEMBER", "STAFF", "EMPLOYEE", "TEAM"):
+        return Role.MEMBER
+    if r in ("SUPER", "SUPERADMIN", "SUPER_ADMIN"):
+        return Role.SUPER_ADMIN
+    return None
+
+
 def login(request):
     body = parse_body(request)
     email = (body.get("email") or "").strip().lower()
-    password = (body.get("password") or "").strip()
+    password = body.get("password")
+    password = password if isinstance(password, str) else ""
     if not email or not password:
         return JsonResponse({"error": "Invalid credentials payload"}, status=400)
 
     user = User.objects.select_related("company").filter(email__iexact=email).first()
     if not user or not verify_password(password, user.password_hash):
         payload = {"error": "Invalid email or password"}
+        role_labels = {
+            Role.COMPANY_ADMIN: "Company admin",
+            Role.MEMBER: "Member (staff)",
+            Role.SUPER_ADMIN: "Super admin",
+        }
         if user:
-            payload["hint"] = "Email sahi hai lekin password galat hai — har account ka apna password hota hai."
+            payload["accountRole"] = user.role
+            payload["accountRoleLabel"] = role_labels.get(user.role, user.role)
+            expected = _normalize_expected_role(str(body.get("expectedRole") or body.get("role") or ""))
+            if expected and expected != user.role:
+                exp_lbl = role_labels.get(expected, expected)
+                payload["hint"] = (
+                    f"Is email par database mein «{payload['accountRoleLabel']}» account hai, "
+                    f"lekin aap ne login form par «{exp_lbl}» chuna hai. "
+                    f"«{payload['accountRoleLabel']}» wala password likhein (har role ka password alag hota hai)."
+                )
+            else:
+                payload["hint"] = (
+                    f"Email sahi hai; is par «{payload['accountRoleLabel']}» account hai. "
+                    "Password galat lag raha hai — Django Admin / jo password set kiya tha wahi exact likhein "
+                    "(copy-paste, spaces, naya/purana password check)."
+                )
         elif Company.objects.filter(email__iexact=email).exists():
             payload["hint"] = (
                 "Company record is email par hai lekin user login set nahi. "

@@ -13,10 +13,39 @@ type LoginOk = {
   demoMode?: boolean;
 };
 
-type LoginErr = { error?: string; debug_hint?: string; debug_note?: string; hint?: string };
+type LoginErr = {
+  error?: string;
+  debug_hint?: string;
+  debug_note?: string;
+  hint?: string;
+  accountRole?: string;
+  accountRoleLabel?: string;
+};
+
+const ROLE_OPTIONS = [
+  {
+    value: "COMPANY_ADMIN" as const,
+    title: "Company admin",
+    subtitle: "Company banayi / team manage",
+    emoji: "🏢",
+  },
+  {
+    value: "MEMBER" as const,
+    title: "Member",
+    subtitle: "Attendance mark karna",
+    emoji: "👤",
+  },
+  {
+    value: "SUPER_ADMIN" as const,
+    title: "Super admin",
+    subtitle: "Poora system (agar account ho)",
+    emoji: "⚙️",
+  },
+];
 
 export default function LoginForm() {
   const router = useRouter();
+  const [expectedRole, setExpectedRole] = useState<(typeof ROLE_OPTIONS)[number]["value"]>("COMPANY_ADMIN");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -75,7 +104,8 @@ export default function LoginForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: email.trim().toLowerCase(),
-        password: password.trim(),
+        password,
+        expectedRole,
       }),
     });
 
@@ -114,7 +144,36 @@ export default function LoginForm() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-5">
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-500">
+          Pehle apna role chunein
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {ROLE_OPTIONS.map((opt) => {
+            const active = expectedRole === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setExpectedRole(opt.value)}
+                className={`rounded-2xl border px-3 py-3 text-left text-sm transition ${
+                  active
+                    ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200 dark:border-indigo-400 dark:bg-indigo-950/40 dark:ring-indigo-800"
+                    : "border-slate-200 bg-white hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-zinc-600"
+                }`}
+              >
+                <span className="text-lg" aria-hidden>
+                  {opt.emoji}
+                </span>
+                <span className="mt-1 block font-semibold text-slate-900 dark:text-zinc-100">{opt.title}</span>
+                <span className="mt-0.5 block text-xs text-slate-600 dark:text-zinc-400">{opt.subtitle}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-300">Email</label>
         <input
@@ -138,7 +197,7 @@ export default function LoginForm() {
       </div>
 
       <p className="text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
-        Har bande ki <strong>apni email</strong> — company admin, member, super admin sab alag email se login. Password har account ka alag hota hai; login ke baad dashboard role ke hisaab se khulta hai.
+        Har login ki <strong>alag email</strong> (DB mein unique). Neeche jo role chuno uske mutabiq <strong>usi account</strong> ka password likho — galat role + sahi doosre role ka password bhi isi error jaisa lag sakta hai.
       </p>
 
       {memberBanner && (

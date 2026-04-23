@@ -83,7 +83,10 @@ export default function Home() {
         <section className="rounded-3xl border border-slate-200/90 bg-[var(--card)] p-8 shadow-xl dark:border-zinc-800 lg:p-10">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Login</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
-            Sign in with the email and password for your role. After login, members also see their company name.
+            Pehle role chunein, phir apni email aur password. Company admin, member aur super admin ke liye alag dashboards.
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
+            English: sign in with the credentials issued from Django Admin — each account has its own email and password.
           </p>
           <div className="mt-8">
             <LoginForm />
