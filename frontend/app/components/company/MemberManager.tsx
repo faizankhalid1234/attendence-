@@ -9,6 +9,7 @@ export default function MemberManager() {
   const [members, setMembers] = useState<Member[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
   const load = async () => {
@@ -25,10 +26,13 @@ export default function MemberManager() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setMessage("");
+    const body: { name: string; email: string; password?: string } = { name, email: email.trim().toLowerCase() };
+    if (password.trim().length >= 8) body.password = password.trim();
+
     const res = await apiFetch("/api/company/members", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -36,11 +40,14 @@ export default function MemberManager() {
       return;
     }
 
-    let msg = `Member added. Temporary password: ${data.member.tempPassword}`;
+    let msg = password.trim().length >= 8
+      ? "Member added — password aap ne set kiya; welcome email bheji gayi (agar SMTP on ho)."
+      : `Member added. Temporary password: ${data.member.tempPassword}`;
     if (data.emailWarning) msg += ` | ${data.emailWarning}`;
     setMessage(msg);
     setName("");
     setEmail("");
+    setPassword("");
     await load();
   };
 
@@ -51,6 +58,10 @@ export default function MemberManager() {
         className="grid gap-3 rounded-3xl border border-slate-200/80 bg-[var(--card)] p-6 shadow-md dark:border-zinc-800 dark:bg-zinc-900/80"
       >
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Add Member</h3>
+        <p className="text-xs text-slate-600 dark:text-zinc-400">
+          Unique email recommend. Password khali chhoro to system random banayega; warna kam az kam 8 characters (member
+          ko email mein bhej diya jayega).
+        </p>
         <input
           className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
           placeholder="Member Name"
@@ -65,6 +76,15 @@ export default function MemberManager() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+        />
+        <input
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+          placeholder="Member login password (optional, min 8 chars)"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
         <button className="rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow hover:bg-emerald-500">
           Add Member

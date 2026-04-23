@@ -337,7 +337,9 @@ def super_admin_companies(request):
         role=Role.COMPANY_ADMIN,
         company=company,
     )
-    mail_result = send_credentials_email(company_email, admin_name, password, "Company")
+    mail_result = send_credentials_email(
+        company_email, admin_name, password, "Company", company_name=company_name
+    )
     payload = {
         "message": "Company created",
         "company": {"id": str(company.id), "name": company.name, "email": company.email, "tempPassword": password},
@@ -355,40 +357,6 @@ def super_admin_companies(request):
 def super_admin_members(request):
     """Deprecated: member creation is handled by company admins from the company dashboard."""
     return JsonResponse({"error": "This endpoint is disabled. Add members from the company admin dashboard."}, status=410)
-    body = parse_body(request)
-    company_id = (body.get("companyId") or "").strip()
-    name = (body.get("name") or "").strip()
-    email = (body.get("email") or "").strip().lower()
-    if not company_id or not name or not email:
-        return JsonResponse({"error": "companyId, name, email zaroori hain."}, status=400)
-    company = Company.objects.filter(id=company_id).first()
-    if not company:
-        return JsonResponse({"error": "Company nahi mili."}, status=404)
-    password = generate_password()
-    member = User.objects.create(
-        name=name,
-        email=email,
-        password_hash=hash_password(password),
-        role=Role.MEMBER,
-        company_id=company_id,
-    )
-    mail_result = send_credentials_email(email, name, password, "Member")
-    payload = {
-        "message": "Member add ho gaya",
-        "member": {
-            "id": str(member.id),
-            "name": member.name,
-            "email": member.email,
-            "companyId": str(company_id),
-            "createdAt": member.created_at.isoformat(),
-            "tempPassword": password,
-        },
-    }
-    if mail_result.get("mocked"):
-        payload["emailWarning"] = "SMTP set nahi — password API response me hi hai."
-    elif not mail_result.get("sent"):
-        payload["emailWarning"] = f"Email send fail: {mail_result.get('error', 'unknown')}"
-    return JsonResponse(payload)
 
 
 @csrf_exempt
@@ -412,7 +380,21 @@ def company_members(request):
     email = (body.get("email") or "").strip().lower()
     if not name or not email:
         return JsonResponse({"error": "Invalid payload"}, status=400)
-    password = generate_password()
+
+    raw_pw = body.get("password")
+    if isinstance(raw_pw, str) and raw_pw.strip():
+        password = raw_pw.strip()
+        if len(password) < 8:
+            return JsonResponse({"error": "Member password kam az kam 8 characters hona chahiye."}, status=400)
+        if len(password) > 128:
+            return JsonResponse({"error": "Member password zyada lamba hai."}, status=400)
+    else:
+        password = generate_password()
+
+    company = Company.objects.filter(id=company_id).first()
+    if not company:
+        return JsonResponse({"error": "Company nahi mili."}, status=404)
+
     member = User.objects.create(
         name=name,
         email=email,
@@ -420,7 +402,9 @@ def company_members(request):
         role=Role.MEMBER,
         company_id=company_id,
     )
-    mail_result = send_credentials_email(email, name, password, "Member")
+    mail_result = send_credentials_email(
+        email, name, password, "Member", company_name=company.name
+    )
     payload = {
         "message": "Member created",
         "member": {

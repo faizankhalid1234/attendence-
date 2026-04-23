@@ -83,7 +83,9 @@ class CompanyAdmin(admin.ModelAdmin):
                 f"Purani company «{old_label}» ke paas ab admin login nahi — zarurat ho to wahan edit se naya password / member banaen.",
                 level=messages.WARNING,
             )
-            mail_result = send_credentials_email(obj.email, display_name, company_password, "Company")
+            mail_result = send_credentials_email(
+                obj.email, display_name, company_password, "Company", company_name=obj.name
+            )
             if mail_result.get("mocked"):
                 self.message_user(
                     request,
@@ -107,7 +109,9 @@ class CompanyAdmin(admin.ModelAdmin):
             role=Role.COMPANY_ADMIN,
             company=obj,
         )
-        mail_result = send_credentials_email(obj.email, display_name, company_password, "Company")
+        mail_result = send_credentials_email(
+            obj.email, display_name, company_password, "Company", company_name=obj.name
+        )
         if mail_result.get("mocked"):
             self.message_user(
                 request,
@@ -191,7 +195,14 @@ class UserAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
         if should_send and obj.role in [Role.COMPANY_ADMIN, Role.MEMBER]:
-            send_credentials_email(obj.email, obj.name, raw_password, "Member" if obj.role == Role.MEMBER else "Company")
+            cn = obj.company.name if obj.company else None
+            send_credentials_email(
+                obj.email,
+                obj.name,
+                raw_password,
+                "Member" if obj.role == Role.MEMBER else "Company",
+                company_name=cn,
+            )
             self.message_user(
                 request,
                 f"{obj.role} credentials {obj.email} par send ho gaye.",

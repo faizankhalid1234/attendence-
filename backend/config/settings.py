@@ -5,6 +5,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _env_first(*names: str, default: str = "") -> str:
+    for n in names:
+        v = os.getenv(n, "").strip()
+        if v:
+            return v
+    return default
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -133,12 +142,15 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = os.getenv("SMTP_HOST", "")
-EMAIL_PORT = int(os.getenv("SMTP_PORT", "587"))
-EMAIL_HOST_USER = os.getenv("SMTP_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("SMTP_PASS", "")
-EMAIL_USE_TLS = True
-DEFAULT_FROM_EMAIL = os.getenv("SMTP_FROM", "attendance@system.local")
+# Brevo: EMAIL_HOST=smtp-relay.brevo.com, BREVO_SMTP_LOGIN + BREVO_SMTP_KEY (or legacy SMTP_*)
+EMAIL_HOST = _env_first("EMAIL_HOST", "SMTP_HOST")
+EMAIL_PORT = int(_env_first("EMAIL_PORT", "SMTP_PORT") or "587")
+EMAIL_HOST_USER = _env_first("EMAIL_HOST_USER", "SMTP_USER", "BREVO_SMTP_LOGIN")
+EMAIL_HOST_PASSWORD = _env_first("EMAIL_HOST_PASSWORD", "SMTP_PASS", "BREVO_SMTP_KEY")
+EMAIL_USE_TLS = _env_first("EMAIL_USE_TLS", default="true").lower() in ("1", "true", "yes", "on")
+DEFAULT_FROM_EMAIL = _env_first("DEFAULT_FROM_EMAIL", "BREVO_SENDER_EMAIL", "SMTP_FROM", default="noreply@localhost")
+EMAIL_BRAND_NAME = _env_first("EMAIL_BRAND_NAME", "BANK_NAME_EMAIL", default="Attendance Mark")
+FRONTEND_LOGIN_URL = _env_first("FRONTEND_LOGIN_URL", default="http://localhost:3000").rstrip("/")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
