@@ -29,21 +29,29 @@ class CompanyAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["email"].label = "Company login email"
         self.fields["email"].help_text = (
-            "Har login account ki apni unique email — yahi email company admin ke liye bhi use hogi."
+            "Har user ki DB mein unique email. Wahi email dubara nayi company ke liye use ho sakti hai "
+            "agar pehle se sirf company-admin is par hai — admin nayi company par shift ho jayega."
         )
 
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip().lower()
         if not email:
             return email
-        qs = User.objects.filter(email__iexact=email)
         if self.instance.pk:
+            qs = User.objects.filter(email__iexact=email)
             admin = User.objects.filter(company_id=self.instance.pk, role=Role.COMPANY_ADMIN).first()
             if admin:
                 qs = qs.exclude(pk=admin.pk)
-        if qs.exists():
+            if qs.exists():
+                raise forms.ValidationError(
+                    "Ye email pehle se kisi aur user par hai — member/super ke sath yahi email use nahi ho sakti."
+                )
+            return email
+
+        # Nayi company: member / super par email block; sirf pehle wala company-admin allow (save par shift hoga)
+        if User.objects.filter(email__iexact=email).exclude(role=Role.COMPANY_ADMIN).exists():
             raise forms.ValidationError(
-                "Ye email pehle se kisi aur user par hai. Har shakhs ki alag email honi chahiye."
+                "Ye email member ya super admin par pehle se hai — company ke liye alag email use karein."
             )
         return email
 
@@ -68,7 +76,7 @@ class CompanyAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
     def _sync_company_login_user(self, request, obj, company_password: str) -> None:
-        """Is company ka COMPANY_ADMIN: pehle company FK se dhundo, phir naya user."""
+        """Is company ka COMPANY_ADMIN: pehle isi company par; warna wahi email kisi aur company ke admin par ho to shift."""
         display_name = (obj.name or "").strip() or obj.email
         admin = User.objects.filter(company=obj, role=Role.COMPANY_ADMIN).first()
         if admin:
@@ -81,6 +89,37 @@ class CompanyAdmin(admin.ModelAdmin):
                 f"Company login update: {obj.email} (password form se).",
                 level=messages.SUCCESS,
             )
+            return
+
+        other_admin = User.objects.filter(email__iexact=obj.email, role=Role.COMPANY_ADMIN).first()
+        if other_admin and other_admin.company_id != obj.id:
+            old_co = other_admin.company
+            old_label = old_co.name if old_co else "—"
+            other_admin.company = obj
+            other_admin.name = display_name
+            other_admin.password_hash = hash_password(company_password)
+            other_admin.save(update_fields=["company", "name", "password_hash", "updated_at"])
+            self.message_user(
+                request,
+                f"Isi email ({obj.email}) ka company-admin ab «{obj.name}» par shift ho gaya. "
+                f"Purani company «{old_label}» ke paas ab admin login nahi — zarurat ho to wahan edit se naya password / member banaen.",
+                level=messages.WARNING,
+            )
+            mail_result = send_credentials_email(obj.email, display_name, company_password, "Company")
+            if mail_result.get("mocked"):
+                self.message_user(
+                    request,
+                    "SMTP off — login ke liye wahi password jo form mein diya.",
+                    level=messages.SUCCESS,
+                )
+            elif not mail_result.get("sent"):
+                self.message_user(
+                    request,
+                    f"Email send fail: {mail_result.get('error', 'unknown')}",
+                    level=messages.WARNING,
+                )
+            else:
+                self.message_user(request, f"Credentials {obj.email} par bhej diye.", level=messages.SUCCESS)
             return
 
         if User.objects.filter(email__iexact=obj.email).exists():
