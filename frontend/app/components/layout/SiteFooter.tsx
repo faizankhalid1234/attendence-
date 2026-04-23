@@ -79,8 +79,9 @@ export default function SiteFooter() {
           </summary>
           <ol className="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm leading-relaxed text-slate-600 dark:border-zinc-800 dark:text-zinc-300">
             <li>
-              <strong className="text-slate-800 dark:text-zinc-100">1. Super Admin</strong> — Creates companies (each
-              with its own company admin login). Can also add members to any company from the super-admin dashboard.
+              <strong className="text-slate-800 dark:text-zinc-100">1. Setup</strong> — Companies aur company-admin
+              accounts Django Admin (backend) se banaye jate hain; is web app par sirf company admin aur member login
+              hota hai.
             </li>
             <li>
               <strong className="text-slate-800 dark:text-zinc-100">2. Company Admin</strong> — Logs in with the

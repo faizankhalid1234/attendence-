@@ -6,20 +6,20 @@ import { siteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Attendance Management Platform",
   description:
-    "Attendance Mark helps teams track check-in and check-out with live GPS, camera proof, and role-based dashboards for members, company admins, and super admins.",
+    "Attendance Mark helps teams track check-in and check-out with live GPS, camera proof, and role-based dashboards for members and company admins.",
   alternates: {
     canonical: "/",
   },
   openGraph: {
     title: "Attendance Management Platform",
     description:
-      "Track shift attendance with live GPS and camera check-in/check-out. Separate dashboards for members, company admins, and super admins.",
+      "Track shift attendance with live GPS and camera check-in/check-out. Separate dashboards for members and company admins.",
     url: "/",
   },
   twitter: {
     title: "Attendance Management Platform",
     description:
-      "Track shift attendance with live GPS and camera check-in/check-out. Separate dashboards for members, company admins, and super admins.",
+      "Track shift attendance with live GPS and camera check-in/check-out. Separate dashboards for members and company admins.",
   },
 };
 
@@ -33,7 +33,7 @@ export default function Home() {
         name: "Attendance Mark",
         url: `${base}/`,
         description:
-          "Shift-based attendance with live GPS and camera check-in/out for super admin, company admin, and members.",
+          "Shift-based attendance with live GPS and camera check-in/out for company admins and members.",
         inLanguage: "en",
       },
       {
@@ -43,7 +43,7 @@ export default function Home() {
         applicationCategory: "BusinessApplication",
         operatingSystem: "Any",
         description:
-          "Super admin, company admin, and member portals with team dashboards and scoped attendance data.",
+          "Company admin and member portals with team dashboards and scoped attendance data.",
       },
     ],
   };
@@ -64,8 +64,8 @@ export default function Home() {
             Clear roles.
           </h1>
           <p className="mt-5 max-w-md text-sm leading-relaxed text-slate-300">
-            Super admin manages every company and member. Company admins see only their team. Members see only their own
-            record — summary and day-by-day views in separate sections. Use the navbar to jump straight to each dashboard.
+            Companies are set up in Django Admin. Company admins see only their team; members see only their own record
+            — summary and day-by-day views in separate sections. Use the navbar to jump to the right dashboard.
           </p>
           <ul className="mt-8 space-y-3 text-sm text-slate-200">
             <li className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
@@ -83,7 +83,7 @@ export default function Home() {
         <section className="rounded-3xl border border-slate-200/90 bg-[var(--card)] p-8 shadow-xl dark:border-zinc-800 lg:p-10">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Login</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
-            Pehle role chunein, phir apni email aur password. Company admin, member aur super admin ke liye alag dashboards.
+            Pehle role chunein, phir apni email aur password — company admin ya member.
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
             English: sign in with the credentials issued from Django Admin — each account has its own email and password.

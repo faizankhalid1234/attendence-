@@ -35,12 +35,6 @@ const ROLE_OPTIONS = [
     subtitle: "Attendance mark karna",
     emoji: "👤",
   },
-  {
-    value: "SUPER_ADMIN" as const,
-    title: "Super admin",
-    subtitle: "Poora system (agar account ho)",
-    emoji: "⚙️",
-  },
 ];
 
 export default function LoginForm() {

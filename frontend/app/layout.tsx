@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 const description =
-  "Super admin, company admin, and member roles — shift windows, live GPS, and camera check-in/out. Team dashboards and attendance history in one place.";
+  "Company admin and member roles — shift windows, live GPS, and camera check-in/out. Team dashboards and attendance history in one place.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),

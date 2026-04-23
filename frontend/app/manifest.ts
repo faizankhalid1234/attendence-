@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Attendance Mark",
     short_name: "Attendance",
     description:
-      "Shift-based attendance with live GPS and camera check-in/out for super admin, company admin, and members.",
+      "Shift-based attendance with live GPS and camera check-in/out for company admins and members.",
     start_url: "/",
     scope: "/",
     display: "standalone",

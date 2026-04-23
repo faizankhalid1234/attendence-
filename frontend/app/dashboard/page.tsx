@@ -25,7 +25,11 @@ export default function DashboardRouter() {
       return;
     }
     if (role === "SUPER_ADMIN") {
-      router.replace("/super-admin/dashboard");
+      sessionStorage.removeItem("portalRole");
+      sessionStorage.removeItem("portalCompanyName");
+      sessionStorage.removeItem("portalUserName");
+      window.dispatchEvent(new Event("portalRoleChanged"));
+      router.replace("/");
       return;
     }
 

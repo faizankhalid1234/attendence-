@@ -43,7 +43,7 @@ export default function OpenGraphImage() {
           <div style={{ fontSize: 58, fontWeight: 800, color: "#ffffff", lineHeight: 1.08 }}>Clear roles.</div>
         </div>
         <div style={{ marginTop: 28, fontSize: 26, color: "#cbd5e1", maxWidth: 820, lineHeight: 1.45 }}>
-          Live GPS + camera check-in/out · Super admin, company admin, and member portals
+          Live GPS + camera check-in/out · Company admin and member portals
         </div>
       </div>
     ),
