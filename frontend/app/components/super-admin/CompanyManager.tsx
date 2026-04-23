@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { apiFetch, readJsonSafe } from "@/lib/api";
 import { COMMON_TIMEZONES } from "@/lib/timezones";
 
 type Company = {
@@ -29,22 +29,29 @@ export default function CompanyManager() {
   const [officeLongitude, setOfficeLongitude] = useState("67.001100");
   const [locationRadiusMeters, setLocationRadiusMeters] = useState("200");
   const [message, setMessage] = useState("");
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    setLoadingCompanies(true);
     const res = await apiFetch("/api/super-admin/companies");
-    const data = await res.json();
+    const data = (await readJsonSafe<{ companies?: Company[]; error?: string; hint?: string }>(res)) || {};
     if (res.ok) {
       setCompanies(data.companies || []);
+      setLoadingCompanies(false);
       return;
     }
     const hint = typeof data.hint === "string" ? data.hint : "";
     setMessage([data.error || "Could not load companies", hint].filter(Boolean).join(" — "));
-  };
+    setLoadingCompanies(false);
+  }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, []);
+    const timer = window.setInterval(() => {
+      void load();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -200,6 +207,16 @@ export default function CompanyManager() {
               <th className="px-4 py-3">Time window</th>
               <th className="px-4 py-3">Radius</th>
               <th className="px-4 py-3">Members</th>
+              <th className="px-4 py-3 text-right">
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  title="Refresh companies"
+                >
+                  {loadingCompanies ? "Refreshing..." : "Refresh"}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -213,12 +230,13 @@ export default function CompanyManager() {
                 </td>
                 <td className="px-4 py-3 text-slate-600 dark:text-zinc-400">{company.locationRadiusMeters}m</td>
                 <td className="px-4 py-3 text-slate-600 dark:text-zinc-400">{company.membersCount}</td>
+                <td className="px-4 py-3" />
               </tr>
             ))}
             {companies.length === 0 && (
               <tr>
-                <td className="px-4 py-4 text-slate-500" colSpan={5}>
-                  No companies yet.
+                <td className="px-4 py-4 text-slate-500" colSpan={6}>
+                  {loadingCompanies ? "Loading companies..." : "No companies yet."}
                 </td>
               </tr>
             )}
