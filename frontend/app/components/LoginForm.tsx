@@ -43,16 +43,6 @@ export default function LoginForm() {
       window.dispatchEvent(new Event("portalRoleChanged"));
     }
 
-    if (data.role === "SUPER_ADMIN") {
-      router.push("/super-admin/dashboard");
-      router.refresh();
-      return;
-    }
-    if (data.role === "COMPANY_ADMIN") {
-      router.push("/company/dashboard");
-      router.refresh();
-      return;
-    }
     if (data.role === "MEMBER") {
       setMemberBanner({
         role: data.role,
@@ -61,13 +51,13 @@ export default function LoginForm() {
         companyId: data.companyId ?? null,
       });
       window.setTimeout(() => {
-        router.push("/member/dashboard");
+        router.push("/dashboard");
         router.refresh();
       }, 900);
       return;
     }
 
-    router.push("/");
+    router.push("/dashboard");
     router.refresh();
   };
 

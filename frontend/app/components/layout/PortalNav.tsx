@@ -6,13 +6,6 @@ import { usePathname } from "next/navigation";
 
 type NavItem = { href: string; label: string };
 
-const ALL_LINKS: NavItem[] = [
-  { href: "/", label: "Home" },
-  { href: "/member/dashboard", label: "Member" },
-  { href: "/company/dashboard", label: "Company" },
-  { href: "/super-admin/dashboard", label: "Super Admin" },
-];
-
 export default function PortalNav() {
   const pathname = usePathname();
   const [role, setRole] = useState<string>("");
@@ -26,11 +19,12 @@ export default function PortalNav() {
   }, [pathname]);
 
   const links = useMemo(() => {
-    const r = role.trim();
-    if (r === "SUPER_ADMIN") return ALL_LINKS;
-    if (r === "COMPANY_ADMIN") return ALL_LINKS.filter((l) => l.href !== "/super-admin/dashboard");
-    if (r === "MEMBER") return ALL_LINKS.filter((l) => l.href !== "/super-admin/dashboard");
-    return ALL_LINKS;
+    const base: NavItem[] = [
+      { href: "/", label: "Home" },
+      { href: "/dashboard", label: "Dashboard" },
+    ];
+    void role;
+    return base;
   }, [role]);
 
   return (
