@@ -29,31 +29,9 @@ class CompanyAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["email"].label = "Company login email"
         self.fields["email"].help_text = (
-            "Har user ki DB mein unique email. Wahi email dubara nayi company ke liye use ho sakti hai "
-            "agar pehle se sirf company-admin is par hai — admin nayi company par shift ho jayega."
+            "Member / company admin / doosri company — kahin bhi wahi email dubara use ho sakti hai. "
+            "Login par role sahi chunein (same email par alag passwords ho sakte hain)."
         )
-
-    def clean_email(self):
-        email = (self.cleaned_data.get("email") or "").strip().lower()
-        if not email:
-            return email
-        if self.instance.pk:
-            qs = User.objects.filter(email__iexact=email)
-            admin = User.objects.filter(company_id=self.instance.pk, role=Role.COMPANY_ADMIN).first()
-            if admin:
-                qs = qs.exclude(pk=admin.pk)
-            if qs.exists():
-                raise forms.ValidationError(
-                    "Ye email pehle se kisi aur user par hai — member/super ke sath yahi email use nahi ho sakti."
-                )
-            return email
-
-        # Nayi company: member / super par email block; sirf pehle wala company-admin allow (save par shift hoga)
-        if User.objects.filter(email__iexact=email).exclude(role=Role.COMPANY_ADMIN).exists():
-            raise forms.ValidationError(
-                "Ye email member ya super admin par pehle se hai — company ke liye alag email use karein."
-            )
-        return email
 
     def clean(self):
         cleaned = super().clean()
@@ -122,14 +100,6 @@ class CompanyAdmin(admin.ModelAdmin):
                 self.message_user(request, f"Credentials {obj.email} par bhej diye.", level=messages.SUCCESS)
             return
 
-        if User.objects.filter(email__iexact=obj.email).exists():
-            self.message_user(
-                request,
-                f"{obj.email} pehle se doosre account par hai — company admin create nahi hua.",
-                level=messages.WARNING,
-            )
-            return
-
         User.objects.create(
             name=display_name,
             email=obj.email,
@@ -186,17 +156,6 @@ class UserAdminForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ["name", "email", "role", "company", "plain_password"]
-
-    def clean_email(self):
-        email = (self.cleaned_data.get("email") or "").strip().lower()
-        if not email:
-            return email
-        qs = User.objects.filter(email__iexact=email)
-        if self.instance and getattr(self.instance, "pk", None):
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise forms.ValidationError("Ye email pehle se kisi user par hai — har account ki unique email honi chahiye.")
-        return email
 
     def clean(self):
         cleaned = super().clean()

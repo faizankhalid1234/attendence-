@@ -64,6 +64,17 @@ def allowed_image_type(upload) -> bool:
     return name.endswith((".jpg", ".jpeg", ".png", ".webp"))
 
 
+def _normalize_expected_role(raw: str) -> str | None:
+    r = (raw or "").strip().upper().replace("-", "_")
+    if r in ("COMPANY", "OWNER", "BUSINESS", "COMPANY_ADMIN", "ADMIN"):
+        return Role.COMPANY_ADMIN
+    if r in ("MEMBER", "STAFF", "EMPLOYEE", "TEAM"):
+        return Role.MEMBER
+    if r in ("SUPER", "SUPERADMIN", "SUPER_ADMIN"):
+        return Role.SUPER_ADMIN
+    return None
+
+
 def auth_required(*roles):
     def outer(fn):
         @wraps(fn)
@@ -97,19 +108,6 @@ def auth_required(*roles):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def _normalize_expected_role(raw: str) -> str | None:
-    r = (raw or "").strip().upper().replace("-", "_")
-    if r in ("COMPANY", "OWNER", "BUSINESS"):
-        return Role.COMPANY_ADMIN
-    if r in ("COMPANY_ADMIN", "ADMIN"):
-        return Role.COMPANY_ADMIN
-    if r in ("MEMBER", "STAFF", "EMPLOYEE", "TEAM"):
-        return Role.MEMBER
-    if r in ("SUPER", "SUPERADMIN", "SUPER_ADMIN"):
-        return Role.SUPER_ADMIN
-    return None
-
-
 def login(request):
     body = parse_body(request)
     email = (body.get("email") or "").strip().lower()
@@ -118,38 +116,72 @@ def login(request):
     if not email or not password:
         return JsonResponse({"error": "Invalid credentials payload"}, status=400)
 
-    user = User.objects.select_related("company").filter(email__iexact=email).first()
-    if not user or not verify_password(password, user.password_hash):
-        payload = {"error": "Invalid email or password"}
-        role_labels = {
-            Role.COMPANY_ADMIN: "Company admin",
-            Role.MEMBER: "Member (staff)",
-            Role.SUPER_ADMIN: "Super admin",
-        }
-        if user:
-            payload["accountRole"] = user.role
-            payload["accountRoleLabel"] = role_labels.get(user.role, user.role)
-            expected = _normalize_expected_role(str(body.get("expectedRole") or body.get("role") or ""))
-            if expected and expected != user.role:
-                exp_lbl = role_labels.get(expected, expected)
+    role_labels = {
+        Role.COMPANY_ADMIN: "Company admin",
+        Role.MEMBER: "Member (staff)",
+        Role.SUPER_ADMIN: "Super admin",
+    }
+    expected = _normalize_expected_role(str(body.get("expectedRole") or body.get("role") or ""))
+
+    base = list(
+        User.objects.select_related("company")
+        .filter(email__iexact=email)
+        .order_by("-created_at")
+    )
+
+    def first_password_match(users: list, role: str | None):
+        for u in users:
+            if role is not None and u.role != role:
+                continue
+            if verify_password(password, u.password_hash):
+                return u
+        return None
+
+    user = first_password_match(base, expected) if expected else first_password_match(base, None)
+
+    if not user:
+        payload: dict = {"error": "Invalid email or password"}
+        if not base:
+            if Company.objects.filter(email__iexact=email).exists():
                 payload["hint"] = (
-                    f"Is email par database mein «{payload['accountRoleLabel']}» account hai, "
-                    f"lekin aap ne login form par «{exp_lbl}» chuna hai. "
-                    f"«{payload['accountRoleLabel']}» wala password likhein (har role ka password alag hota hai)."
+                    "Company record is email par hai lekin user login set nahi. "
+                    "Django Admin > Companies > edit > Company login password save karein."
+                )
+            if django_settings.DEBUG:
+                payload["debug_hint"] = "user_not_found"
+            return JsonResponse(payload, status=401)
+
+        pwd_user = first_password_match(base, None)
+        if pwd_user and expected and pwd_user.role != expected:
+            payload["accountRole"] = pwd_user.role
+            payload["accountRoleLabel"] = role_labels.get(pwd_user.role, pwd_user.role)
+            payload["hint"] = (
+                f"Password sahi hai — is email par «{payload['accountRoleLabel']}» account mila. "
+                f"Login form par wahi role chunein (aap ne «{role_labels.get(expected, expected)}» chuna tha)."
+            )
+        elif expected and not any(u.role == expected for u in base):
+            roles_here = sorted({role_labels.get(u.role, u.role) for u in base})
+            payload["hint"] = (
+                f"Is email par «{role_labels.get(expected, expected)}» wala account nahi hai — "
+                f"yahan ye roles hain: {', '.join(roles_here)}."
+            )
+        else:
+            roles_here = sorted({role_labels.get(u.role, u.role) for u in base})
+            if len(base) > 1:
+                payload["hint"] = (
+                    f"Password in mein se kisi se match nahi hua. Is email par {len(base)} account(s): {', '.join(roles_here)}. "
+                    "Role sahi chunein aur usi role wala password likhein."
                 )
             else:
+                u0 = base[0]
+                payload["accountRole"] = u0.role
+                payload["accountRoleLabel"] = role_labels.get(u0.role, u0.role)
                 payload["hint"] = (
-                    f"Email sahi hai; is par «{payload['accountRoleLabel']}» account hai. "
-                    "Password galat lag raha hai — Django Admin / jo password set kiya tha wahi exact likhein "
-                    "(copy-paste, spaces, naya/purana password check)."
+                    f"Email mili; «{payload['accountRoleLabel']}» — password galat. "
+                    "Django Admin wala password exact likhein."
                 )
-        elif Company.objects.filter(email__iexact=email).exists():
-            payload["hint"] = (
-                "Company record is email par hai lekin user login set nahi. "
-                "Django Admin > Companies > edit > Company login password save karein."
-            )
         if django_settings.DEBUG:
-            payload["debug_hint"] = "user_not_found" if not user else "bad_password"
+            payload["debug_hint"] = "bad_password"
         return JsonResponse(payload, status=401)
 
     token = make_token({"userId": str(user.id), "role": user.role, "companyId": str(user.company_id) if user.company_id else None})

@@ -197,7 +197,7 @@ export default function LoginForm() {
       </div>
 
       <p className="text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
-        Har login ki <strong>alag email</strong> (DB mein unique). Neeche jo role chuno uske mutabiq <strong>usi account</strong> ka password likho — galat role + sahi doosre role ka password bhi isi error jaisa lag sakta hai.
+        Wahi email <strong>kai jagah</strong> (member + company, ya do companies) ho sakti hai — har account ka <strong>password alag</strong> ho sakta hai. Is liye role sahi chunein; agar password sahi ho lekin role galat ho to server hint mein bata dega.
       </p>
 
       {memberBanner && (

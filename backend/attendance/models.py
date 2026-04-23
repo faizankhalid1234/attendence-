@@ -61,7 +61,7 @@ class Company(models.Model):
 class User(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
-    email = models.EmailField(unique=True)
+    email = models.EmailField()
     password_hash = models.CharField(max_length=255)
     role = models.CharField(max_length=20, choices=Role.choices)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name="users")
