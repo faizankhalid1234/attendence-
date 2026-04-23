@@ -5,14 +5,11 @@ from .utils import generate_password, hash_password, send_credentials_email
 
 
 class CompanyAdminForm(forms.ModelForm):
-    admin_name = forms.CharField(
-        required=False,
-        help_text="Sirf nayi company ke liye: admin ka naam (credentials isi email par jayenge).",
-    )
-    admin_password = forms.CharField(
+    company_login_password = forms.CharField(
+        label="Company login password",
         required=False,
         widget=forms.PasswordInput(render_value=False),
-        help_text="Sirf nayi company ke liye: company admin ka login password (frontend login ke liye).",
+        help_text="Sirf nayi company: upar wali company email + ye password se frontend par login.",
     )
 
     class Meta:
@@ -28,19 +25,27 @@ class CompanyAdminForm(forms.ModelForm):
             "location_radius_meters",
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["email"].label = "Company login email"
+        self.fields["email"].help_text = "Frontend company login: ye email + neeche company login password."
+
     def clean(self):
         cleaned = super().clean()
         if not self.instance.pk:
-            if not (cleaned.get("admin_name") or "").strip():
-                raise forms.ValidationError("Nayi company ke liye admin_name zaroori hai.")
-            if not (cleaned.get("admin_password") or "").strip():
-                raise forms.ValidationError("Nayi company ke liye admin_password zaroori hai.")
+            if not (cleaned.get("company_login_password") or "").strip():
+                raise forms.ValidationError("Nayi company ke liye company login password zaroori hai.")
         return cleaned
 
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
     form = CompanyAdminForm
+    fieldsets = (
+        ("Company login (frontend)", {"fields": ("name", "email", "company_login_password")}),
+        ("Timings & location", {"fields": ("work_start_time", "work_end_time", "timezone", "office_latitude", "office_longitude", "location_radius_meters")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
     list_display = ("name", "email", "work_start_time", "work_end_time", "timezone", "location_radius_meters", "created_at")
     search_fields = ("name", "email")
     readonly_fields = ("created_at", "updated_at")
@@ -49,12 +54,16 @@ class CompanyAdmin(admin.ModelAdmin):
         is_new = obj.pk is None
         super().save_model(request, obj, form, change)
 
-        # Company create hote hi company admin user bhi create karo.
+        # Company create hote hi company login (COMPANY_ADMIN user) bhi set karo — email Company.email, password form se.
         if is_new:
-            admin_name = (form.cleaned_data.get("admin_name") or "").strip()
-            admin_password = (form.cleaned_data.get("admin_password") or "").strip()
-            if not admin_name or not admin_password:
-                self.message_user(request, "admin_name/admin_password missing — company admin create nahi hua.", level=messages.ERROR)
+            display_name = (obj.name or "").strip() or obj.email
+            company_password = (form.cleaned_data.get("company_login_password") or "").strip()
+            if not company_password:
+                self.message_user(
+                    request,
+                    "Company login password missing — company account (login) create nahi hua.",
+                    level=messages.ERROR,
+                )
                 return
 
             existing = User.objects.filter(email=obj.email).order_by("-created_at").first()
@@ -62,45 +71,45 @@ class CompanyAdmin(admin.ModelAdmin):
                 if existing.role != Role.COMPANY_ADMIN:
                     self.message_user(
                         request,
-                        f"Company ban gayi lekin {obj.email} par pehle se non-admin user exist karta hai — admin create/update nahi kiya.",
+                        f"Company ban gayi lekin {obj.email} par pehle se member/doosra role hai — company login set nahi kiya.",
                         level=messages.WARNING,
                     )
                     return
-                existing.name = admin_name
-                existing.password_hash = hash_password(admin_password)
+                existing.name = display_name
+                existing.password_hash = hash_password(company_password)
                 existing.company = obj
                 existing.save(update_fields=["name", "password_hash", "company", "updated_at"])
                 self.message_user(
                     request,
-                    f"Company admin update ho gaya: {obj.email} (password admin form se set).",
+                    f"Company login update: {obj.email} (password form se).",
                     level=messages.SUCCESS,
                 )
                 return
 
             User.objects.create(
-                name=admin_name,
+                name=display_name,
                 email=obj.email,
-                password_hash=hash_password(admin_password),
+                password_hash=hash_password(company_password),
                 role=Role.COMPANY_ADMIN,
                 company=obj,
             )
-            mail_result = send_credentials_email(obj.email, admin_name, admin_password, "Company")
+            mail_result = send_credentials_email(obj.email, display_name, company_password, "Company")
             if mail_result.get("mocked"):
                 self.message_user(
                     request,
-                    f"Company admin create ho gaya: {obj.email}. SMTP off hai — password admin form wala hi use karein.",
+                    f"Company login ready: {obj.email}. SMTP off — wahi password jo form mein diya.",
                     level=messages.SUCCESS,
                 )
             elif not mail_result.get("sent"):
                 self.message_user(
                     request,
-                    f"Company admin create ho gaya: {obj.email}. Email send fail: {mail_result.get('error', 'unknown')}",
+                    f"Company login ready: {obj.email}. Email send fail: {mail_result.get('error', 'unknown')}",
                     level=messages.WARNING,
                 )
             else:
                 self.message_user(
                     request,
-                    f"Company admin create ho gaya. Credentials {obj.email} par send ho gaye.",
+                    f"Company login ready. {obj.email} par credentials bhej diye.",
                     level=messages.SUCCESS,
                 )
 
