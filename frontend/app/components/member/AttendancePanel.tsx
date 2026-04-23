@@ -56,7 +56,8 @@ type SavedMemberGps = {
 };
 
 const GPS_SESSION_PREFIX = "attendance_member_live_gps:";
-const GPS_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const GPS_SESSION_MAX_AGE_MS = 2 * 60 * 1000;
+const GPS_LOCK_MAX_AGE_BEFORE_SUBMIT_MS = 2 * 60 * 1000;
 const MOBILE_LOC_TIP_KEY = "attendance_mobile_location_tip_dismissed_v1";
 
 function gpsSessionKey(companyId: string) {
@@ -253,6 +254,7 @@ export default function AttendancePanel() {
   const [showMobileLocTip, setShowMobileLocTip] = useState(false);
   const [locationQualityNote, setLocationQualityNote] = useState<string | null>(null);
   const [isDemoViewer, setIsDemoViewer] = useState(false);
+  const [coordsCapturedAt, setCoordsCapturedAt] = useState<number | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -323,6 +325,7 @@ export default function AttendancePanel() {
     const saved = readGpsSession(String(id));
     if (!saved) return;
     setCoords({ lat: saved.lat, lng: saved.lng, acc: saved.acc });
+    setCoordsCapturedAt(saved.savedAt || Date.now());
     setLocationLabel(saved.label);
     setLocationDetail(saved.detail);
     setLocationQualityNote(gpsAccuracyNote(saved.acc));
@@ -335,7 +338,7 @@ export default function AttendancePanel() {
       if (document.visibilityState !== "visible") return;
       if (!retryGpsOnVisibleRef.current) return;
       retryGpsOnVisibleRef.current = false;
-      getLocationRef.current();
+      getLocationRef.current({ suppressRepeatedPermissionModal: true });
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
@@ -485,6 +488,7 @@ export default function AttendancePanel() {
     void pending
       .then(async (next) => {
         setCoords(next);
+        setCoordsCapturedAt(Date.now());
         setGpsPhase("ready");
         setLocationLabelLoading(true);
         let main = "";
@@ -530,11 +534,13 @@ export default function AttendancePanel() {
       })
       .catch((err: unknown) => {
         setGpsPhase("none");
+        setCoordsCapturedAt(null);
         const kind = classifyLocationError(err);
         if (kind === "services" || kind === "timeout") {
           retryGpsOnVisibleRef.current = true;
         }
         if (kind === "permission" && skipNextPermissionDeniedModalRef.current) {
+          retryGpsOnVisibleRef.current = true;
           skipNextPermissionDeniedModalRef.current = false;
           setMessage(
             "Site location abhi bhi allow nahi hui (ya pehle Block ho chuki hai). Address bar ka lock / info icon → Site settings → Location → Allow. Phir neeche \"Live GPS — location lock\" dubara dabayein.",
@@ -553,6 +559,11 @@ export default function AttendancePanel() {
     setMessage("");
     if (isDemoViewer) {
       setMessage("Demo user is view-only. Attendance marking is disabled.");
+      setLoading(false);
+      return;
+    }
+    if (!coordsCapturedAt || Date.now() - coordsCapturedAt > GPS_LOCK_MAX_AGE_BEFORE_SUBMIT_MS) {
+      setMessage("Live GPS lock purani ho chuki hai. Current location ke liye dobara \"Live GPS — location lock\" dabayein.");
       setLoading(false);
       return;
     }

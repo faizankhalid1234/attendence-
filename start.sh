@@ -1,14 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
-if ! python -c "import django" >/dev/null 2>&1; then
-  echo "[deploy] Django not found. Installing backend requirements..."
-  python -m pip install --no-cache-dir -r backend/requirements.txt
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  PYTHON_BIN="python"
 fi
 
-if ! command -v gunicorn >/dev/null 2>&1; then
-  echo "[deploy] gunicorn not found. Installing backend requirements..."
-  python -m pip install --no-cache-dir -r backend/requirements.txt
+echo "[deploy] Installing backend requirements..."
+"${PYTHON_BIN}" -m ensurepip --upgrade >/dev/null 2>&1 || true
+"${PYTHON_BIN}" -m pip install --upgrade pip
+"${PYTHON_BIN}" -m pip install --no-cache-dir -r backend/requirements.txt
+
+if ! "${PYTHON_BIN}" -c "import django" >/dev/null 2>&1; then
+  echo "[deploy] Django import still failing after install."
+  exit 1
 fi
 
 if [ ! -d "frontend/node_modules" ]; then
@@ -17,7 +22,7 @@ if [ ! -d "frontend/node_modules" ]; then
 fi
 
 echo "[deploy] Running Django migrations..."
-python backend/manage.py migrate --noinput
+"${PYTHON_BIN}" backend/manage.py migrate --noinput
 
 echo "[deploy] Starting Django API on 4000 (gunicorn)..."
 gunicorn config.wsgi:application --chdir backend --bind 0.0.0.0:4000 --workers "${GUNICORN_WORKERS:-2}" &
