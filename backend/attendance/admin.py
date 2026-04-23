@@ -28,26 +28,30 @@ class CompanyAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["email"].label = "Company login email"
-        self.fields["email"].help_text = "Frontend company login: ye email + neeche company login password."
+        self.fields["email"].help_text = (
+            "Har login account ki apni unique email — yahi email company admin ke liye bhi use hogi."
+        )
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip().lower()
+        if not email:
+            return email
+        qs = User.objects.filter(email__iexact=email)
+        if self.instance.pk:
+            admin = User.objects.filter(company_id=self.instance.pk, role=Role.COMPANY_ADMIN).first()
+            if admin:
+                qs = qs.exclude(pk=admin.pk)
+        if qs.exists():
+            raise forms.ValidationError(
+                "Ye email pehle se kisi aur user par hai. Har shakhs ki alag email honi chahiye."
+            )
+        return email
 
     def clean(self):
         cleaned = super().clean()
         if not self.instance.pk:
             if not (cleaned.get("company_login_password") or "").strip():
                 raise forms.ValidationError("Nayi company ke liye company login password zaroori hai.")
-            email = (cleaned.get("email") or "").strip().lower()
-            if email:
-                conflict = (
-                    User.objects.filter(email__iexact=email)
-                    .exclude(role=Role.COMPANY_ADMIN)
-                    .exists()
-                )
-                if conflict:
-                    raise forms.ValidationError(
-                        "Ye email pehle se member ya doosre role par use ho rahi hai — "
-                        "is par company-admin login create nahi hota. Nayi company email choose karein, "
-                        "ya Django Admin > Users se us user ki email change / user hata dein."
-                    )
         return cleaned
 
 
@@ -64,25 +68,26 @@ class CompanyAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
     def _sync_company_login_user(self, request, obj, company_password: str) -> None:
-        """Company.email + password se COMPANY_ADMIN User create/update."""
+        """Is company ka COMPANY_ADMIN: pehle company FK se dhundo, phir naya user."""
         display_name = (obj.name or "").strip() or obj.email
-        existing = User.objects.filter(email__iexact=obj.email).order_by("-created_at").first()
-        if existing:
-            if existing.role != Role.COMPANY_ADMIN:
-                self.message_user(
-                    request,
-                    f"{obj.email} par pehle se member/doosra role hai — company login set nahi kiya.",
-                    level=messages.WARNING,
-                )
-                return
-            existing.name = display_name
-            existing.password_hash = hash_password(company_password)
-            existing.company = obj
-            existing.save(update_fields=["name", "password_hash", "company", "updated_at"])
+        admin = User.objects.filter(company=obj, role=Role.COMPANY_ADMIN).first()
+        if admin:
+            admin.name = display_name
+            admin.email = obj.email
+            admin.password_hash = hash_password(company_password)
+            admin.save(update_fields=["name", "email", "password_hash", "updated_at"])
             self.message_user(
                 request,
                 f"Company login update: {obj.email} (password form se).",
                 level=messages.SUCCESS,
+            )
+            return
+
+        if User.objects.filter(email__iexact=obj.email).exists():
+            self.message_user(
+                request,
+                f"{obj.email} pehle se doosre account par hai — company admin create nahi hua.",
+                level=messages.WARNING,
             )
             return
 
@@ -142,6 +147,17 @@ class UserAdminForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ["name", "email", "role", "company", "plain_password"]
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip().lower()
+        if not email:
+            return email
+        qs = User.objects.filter(email__iexact=email)
+        if self.instance and getattr(self.instance, "pk", None):
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Ye email pehle se kisi user par hai — har account ki unique email honi chahiye.")
+        return email
 
     def clean(self):
         cleaned = super().clean()

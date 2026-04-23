@@ -104,60 +104,18 @@ def login(request):
     if not email or not password:
         return JsonResponse({"error": "Invalid credentials payload"}, status=400)
 
-    account_type = (body.get("accountType") or body.get("account_type") or "").strip().lower()
-    qs = User.objects.select_related("company").filter(email__iexact=email)
-    if account_type in ("company", "company_admin", "owner"):
-        qs = qs.filter(role=Role.COMPANY_ADMIN)
-    elif account_type in ("member", "staff", "employee", "team"):
-        qs = qs.filter(role=Role.MEMBER)
-    elif account_type in ("super", "super_admin", "superadmin"):
-        qs = qs.filter(role=Role.SUPER_ADMIN)
-
-    candidates = list(qs.order_by("-created_at"))
-    user = next((u for u in candidates if verify_password(password, u.password_hash)), None)
-    if not user:
+    user = User.objects.select_related("company").filter(email__iexact=email).first()
+    if not user or not verify_password(password, user.password_hash):
         payload = {"error": "Invalid email or password"}
-        total_for_email = User.objects.filter(email__iexact=email).count()
-        has_company_admin = User.objects.filter(email__iexact=email, role=Role.COMPANY_ADMIN).exists()
-
-        if account_type in ("company", "company_admin", "owner"):
-            if not has_company_admin and total_for_email > 0:
-                payload["hint"] = (
-                    "Is email par company-admin account nahi hai — shayad pehle se sirf member (ya doosra role) hai. "
-                    "Django Admin mein nayi company ke liye wohi email use mat karo jo member par hai; "
-                    "ya Member login try karo."
-                )
-            elif not has_company_admin and total_for_email == 0 and Company.objects.filter(email__iexact=email).exists():
-                payload["hint"] = (
-                    "Company is email par DB mein hai lekin koi login-user nahi mila. "
-                    "Django Admin > Companies > is company ko edit karo, Company login password bharo, Save — phir dubara login try karo."
-                )
-            elif has_company_admin:
-                payload["hint"] = "Company-admin account milta hai lekin password match nahi hua — wahi password likho jo company add karte waqt Company login password mein diya tha (spaces/typos check)."
-        elif account_type in ("member", "staff", "employee", "team"):
-            has_member = User.objects.filter(email__iexact=email, role=Role.MEMBER).exists()
-            if not has_member and total_for_email > 0:
-                payload["hint"] = (
-                    "Is email par member account nahi hai — shayad company-admin email hai. "
-                    "Company login option try karein."
-                )
-            elif has_member:
-                payload["hint"] = "Member account mila lekin password match nahi hua — member ka password alag hota hai (company wala password yahan kaam nahi karega)."
-
+        if user:
+            payload["hint"] = "Email sahi hai lekin password galat hai — har account ka apna password hota hai."
+        elif Company.objects.filter(email__iexact=email).exists():
+            payload["hint"] = (
+                "Company record is email par hai lekin user login set nahi. "
+                "Django Admin > Companies > edit > Company login password save karein."
+            )
         if django_settings.DEBUG:
-            if total_for_email == 0:
-                payload["debug_hint"] = "user_not_found"
-            else:
-                payload["debug_hint"] = "bad_password"
-                if total_for_email > 1 and not account_type:
-                    payload["debug_note"] = (
-                        "Multiple users share this email — send accountType: "
-                        "\"company\" (company login) or \"member\" (staff) so the correct password is checked."
-                    )
-                elif total_for_email > 0 and account_type and not candidates:
-                    payload["debug_note"] = (
-                        f"No account for this email with accountType={account_type!r} — try the other type or omit accountType."
-                    )
+            payload["debug_hint"] = "user_not_found" if not user else "bad_password"
         return JsonResponse(payload, status=401)
 
     token = make_token({"userId": str(user.id), "role": user.role, "companyId": str(user.company_id) if user.company_id else None})
