@@ -40,7 +40,7 @@ export default function CompanyDashboard() {
                 🏢
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/90">Aap ka role</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/90">Your role</p>
                 <h2 className="mt-1 text-2xl font-bold tracking-tight">Company administrator</h2>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-emerald-50/95">
                   Sirf apni company ka data — members add karna, un ki attendance dekhna, charts aur reports. Har section

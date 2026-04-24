@@ -39,7 +39,7 @@ export default function MemberDashboard() {
                 👤
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-100/90">Aap ka role</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-100/90">Your role</p>
                 <h2 className="mt-1 text-2xl font-bold tracking-tight">Staff / member</h2>
                 <p className="mt-2 max-w-lg text-sm leading-relaxed text-indigo-50/95">
                   Sirf apni attendance aur summary — company admin alag dashboard use karta hai. Neeche wala hissa sirf
