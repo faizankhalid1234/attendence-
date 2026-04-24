@@ -685,8 +685,32 @@ def member_location_label(request):
 def member_attendance(request):
     member_id = request.session_user.get("userId")
     member = User.objects.select_related("company").filter(id=member_id).first()
+    if not member:
+        return JsonResponse({"error": "Member account nahi mila — dubara login karein."}, status=401)
+
+    # Kabhi-kabhi admin ne role MEMBER rakha ho lekin company khali — GET par 400 se UI toot jata hai
+    if not member.company_id:
+        cid = (request.session_user.get("companyId") or "").strip()
+        if cid:
+            co = Company.objects.filter(id=cid).first()
+            if co:
+                member.company = co
+                member.save(update_fields=["company", "updated_at"])
+                member = User.objects.select_related("company").filter(id=member_id).first()
+
     if not member or not member.company:
-        return JsonResponse({"error": "Member company missing"}, status=400)
+        return JsonResponse(
+            {
+                "history": [],
+                "company": None,
+                "companies": [],
+                "demoMode": False,
+                "setupError": (
+                    "Is member par company assign nahi — Django Admin > Users > is user ko company select karke save karein."
+                ),
+            },
+            status=200,
+        )
     company = member.company
 
     if request.method == "GET":
@@ -744,9 +768,13 @@ def member_attendance(request):
             status=400,
         )
 
-    if not request.content_type or "multipart/form-data" not in request.content_type:
+    ct = (request.content_type or "").lower()
+    if "multipart/form-data" not in ct:
         return JsonResponse(
-            {"error": "multipart/form-data bhejo: latitude, longitude, photo (live camera se)."},
+            {
+                "error": "multipart/form-data bhejo: latitude, longitude, photo (live camera se).",
+                "hint": f"Abhi Content-Type: {request.content_type!r} — browser se FormData bhejein (JSON nahi).",
+            },
             status=400,
         )
 

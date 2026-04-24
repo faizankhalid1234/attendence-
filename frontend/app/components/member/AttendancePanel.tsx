@@ -281,6 +281,7 @@ export default function AttendancePanel() {
       companies?: CompanyOption[];
       demoMode?: boolean;
       error?: string;
+      setupError?: string;
     };
     if (!res.ok) {
       setLoadError(data.error || "Could not load records — please log in again.");
@@ -290,6 +291,16 @@ export default function AttendancePanel() {
       setSelectedCompanyId("");
       return;
     }
+    if (typeof data.setupError === "string" && data.setupError.trim()) {
+      setLoadError(data.setupError.trim());
+      setHistory(data.history || []);
+      setCompany(null);
+      setCompaniesList([]);
+      setSelectedCompanyId("");
+      setIsDemoViewer(Boolean(data.demoMode));
+      return;
+    }
+    setLoadError("");
     setHistory(data.history || []);
     setIsDemoViewer(Boolean(data.demoMode));
     const c = data.company || null;

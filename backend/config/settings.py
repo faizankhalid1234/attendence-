@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 from urllib.parse import urlparse
@@ -25,7 +26,16 @@ BASE_DIR = _BASE
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("JWT_SECRET", "replace-with-a-strong-secret")
+# JWT / PyJWT HS256: >=32 byte secrets as-is; chhote par SHA-256 hex (warning + weak key fix, same env = same key).
+def _django_secret_from_jwt_env() -> str:
+    raw = (os.getenv("JWT_SECRET") or "").strip() or "replace-with-a-strong-secret"
+    b = raw.encode("utf-8")
+    if len(b) >= 32:
+        return raw
+    return hashlib.sha256(b).hexdigest()
+
+
+SECRET_KEY = _django_secret_from_jwt_env()
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
