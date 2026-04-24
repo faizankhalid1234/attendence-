@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-type Variant = "company" | "member";
+type Variant = "company" | "member" | "home";
 
 type Props = {
   variant: Variant;
@@ -60,45 +60,75 @@ export default function DashboardShell({ variant, children }: Props) {
   const { x: mx, y: my } = spot;
   const hueShift = (mood - 50) * 2.2;
 
-  const isCompany = variant === "company";
+  const baseLayer: React.CSSProperties =
+    variant === "company"
+      ? {
+          background: "linear-gradient(165deg, #020617 0%, #0f172a 38%, #022c22 55%, #020617 100%)",
+        }
+      : variant === "member"
+        ? {
+            background: "linear-gradient(165deg, #020617 0%, #1e1b4b 42%, #0f172a 58%, #020617 100%)",
+          }
+        : {
+            background:
+              "linear-gradient(165deg, #020617 0%, #0f172a 26%, #1e1b4b 48%, #022c22 70%, #020617 100%)",
+          };
 
-  const baseLayer: React.CSSProperties = isCompany
-    ? {
-        background: "linear-gradient(165deg, #020617 0%, #0f172a 38%, #022c22 55%, #020617 100%)",
-      }
-    : {
-        background: "linear-gradient(165deg, #020617 0%, #1e1b4b 42%, #0f172a 58%, #020617 100%)",
-      };
-
-  const glowLayer: React.CSSProperties = isCompany
-    ? {
-        background: `
+  const glowLayer: React.CSSProperties =
+    variant === "company"
+      ? {
+          background: `
           radial-gradient(ellipse 95% 75% at ${mx}% ${my}%, rgba(16, 185, 129, 0.42), transparent 55%),
           radial-gradient(ellipse 70% 60% at ${100 - mx * 0.75}% ${100 - my * 0.65}%, rgba(34, 211, 238, 0.22), transparent 52%),
           radial-gradient(ellipse 85% 55% at 50% 100%, rgba(5, 150, 105, 0.18), transparent 50%)
         `,
-        filter: `hue-rotate(${hueShift}deg) saturate(1.15)`,
-        transition: "filter 0.35s ease-out",
-      }
-    : {
-        background: `
+          filter: `hue-rotate(${hueShift}deg) saturate(1.15)`,
+          transition: "filter 0.35s ease-out",
+        }
+      : variant === "member"
+        ? {
+            background: `
           radial-gradient(ellipse 95% 75% at ${mx}% ${my}%, rgba(129, 140, 248, 0.4), transparent 55%),
           radial-gradient(ellipse 70% 60% at ${100 - mx * 0.75}% ${100 - my * 0.65}%, rgba(217, 70, 239, 0.2), transparent 52%),
           radial-gradient(ellipse 85% 50% at 50% 0%, rgba(99, 102, 241, 0.16), transparent 48%)
         `,
-        filter: `hue-rotate(${hueShift}deg) saturate(1.12)`,
-        transition: "filter 0.35s ease-out",
-      };
+            filter: `hue-rotate(${hueShift}deg) saturate(1.12)`,
+            transition: "filter 0.35s ease-out",
+          }
+        : {
+            background: `
+          radial-gradient(ellipse 95% 78% at ${mx}% ${my}%, rgba(99, 102, 241, 0.38), transparent 55%),
+          radial-gradient(ellipse 72% 62% at ${100 - mx * 0.72}% ${100 - my * 0.62}%, rgba(45, 212, 191, 0.24), transparent 52%),
+          radial-gradient(ellipse 88% 48% at 18% 12%, rgba(167, 139, 250, 0.16), transparent 50%)
+        `,
+            filter: `hue-rotate(${hueShift}deg) saturate(1.14)`,
+            transition: "filter 0.35s ease-out",
+          };
 
   const rangeAccent =
     variant === "company"
       ? "accent-teal-400 [--tw-ring-color:theme(colors.teal.400/0.35)]"
-      : "accent-violet-400 [--tw-ring-color:theme(colors.violet.400/0.35)]";
+      : variant === "member"
+        ? "accent-violet-400 [--tw-ring-color:theme(colors.violet.400/0.35)]"
+        : "accent-indigo-400 [--tw-ring-color:theme(colors.indigo.400/0.35)]";
+
+  const minHeightClass =
+    variant === "home" ? "min-h-[calc(100vh-8rem)]" : "min-h-[calc(100vh-6rem)]";
+
+  const innerPad =
+    variant === "home"
+      ? "relative z-10 px-4 pb-36 pt-10 sm:px-6 sm:pt-14"
+      : "relative z-10 px-4 pb-36 pt-8 sm:px-6";
+
+  const footerHint =
+    variant === "home"
+      ? "Home page par mouse ghumao — glow spot move hoga. Slider se colour mood badlein (dashboard jaisa)."
+      : "dashboard par mouse ghumao ya trackpad se hover karo — glow spot move hoga. Neeche slider se colour mood badlein.";
 
   return (
     <div
       ref={wrapRef}
-      className="relative isolate min-h-[calc(100vh-6rem)] overflow-x-hidden touch-pan-y"
+      className={`relative isolate ${minHeightClass} overflow-x-hidden touch-pan-y`}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
       onTouchMove={onTouchMove}
@@ -118,13 +148,12 @@ export default function DashboardShell({ variant, children }: Props) {
         }}
       />
 
-      <div className="relative z-10 px-4 pb-36 pt-8 sm:px-6">{children}</div>
+      <div className={innerPad}>{children}</div>
 
       <div className="pointer-events-auto fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-slate-950/75 shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/65">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-6">
           <p className="max-w-md text-[11px] leading-relaxed text-white/65 sm:text-xs">
-            <span className="font-semibold text-white/85">Interactive background:</span> dashboard par mouse ghumao ya
-            trackpad se hover karo — glow spot move hoga. Neeche slider se colour mood badlein.
+            <span className="font-semibold text-white/85">Interactive background:</span> {footerHint}
           </p>
           <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-[280px]">
             <div className="flex items-center justify-between gap-2">
@@ -138,7 +167,7 @@ export default function DashboardShell({ variant, children }: Props) {
               value={mood}
               onChange={(e) => setMood(Number(e.target.value))}
               className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-white/10 shadow-inner ring-1 ring-white/10 transition ${rangeAccent} [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white`}
-              aria-label="Dashboard colour mood"
+              aria-label="Page colour mood"
             />
           </div>
         </div>
