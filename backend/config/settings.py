@@ -26,13 +26,11 @@ BASE_DIR = _BASE
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# JWT / PyJWT HS256: >=32 byte secrets as-is; chhote par SHA-256 hex (warning + weak key fix, same env = same key).
+# PyJWT HS256 warns if key material < 32 bytes — hamesha SHA-256 hex (64 char UTF-8 = 64 bytes) use karte hain.
+# JWT_SECRET same rakho; deploy ke baad sab users ek dafa dubara login (signing key format badla).
 def _django_secret_from_jwt_env() -> str:
     raw = (os.getenv("JWT_SECRET") or "").strip() or "replace-with-a-strong-secret"
-    b = raw.encode("utf-8")
-    if len(b) >= 32:
-        return raw
-    return hashlib.sha256(b).hexdigest()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 SECRET_KEY = _django_secret_from_jwt_env()
