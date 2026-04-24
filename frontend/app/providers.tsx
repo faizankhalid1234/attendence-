@@ -30,17 +30,11 @@ function readStored(): ThemeMode {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>("system");
+  const [mode, setModeState] = useState<ThemeMode>(() => readStored());
   const [resolved, setResolved] = useState<Resolved>("light");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setModeState(readStored());
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
+    if (typeof window === "undefined") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
       let r: Resolved = "light";
@@ -53,7 +47,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
-  }, [mode, mounted]);
+  }, [mode]);
 
   const setMode = useCallback((m: ThemeMode) => {
     setModeState(m);

@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from .models import Attendance, Company, Role, User
 from .utils import generate_password, hash_password, send_credentials_email
 
@@ -29,15 +30,25 @@ class CompanyAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["email"].label = "Company login email"
         self.fields["email"].help_text = (
-            "Member / company admin / doosri company — kahin bhi wahi email dubara use ho sakti hai. "
-            "Login par role sahi chunein (same email par alag passwords ho sakte hain)."
+            "This email is used for company login and must be globally unique across all companies and users."
         )
 
     def clean(self):
         cleaned = super().clean()
+        email = (cleaned.get("email") or "").strip().lower()
+        if email:
+            company_qs = Company.objects.filter(email__iexact=email)
+            if self.instance.pk:
+                company_qs = company_qs.exclude(pk=self.instance.pk)
+            if company_qs.exists():
+                raise ValidationError("This email is already used by another company.")
+
+            user_qs = User.objects.filter(email__iexact=email)
+            if user_qs.exists():
+                raise ValidationError("This email is already used by an existing user.")
         if not self.instance.pk:
             if not (cleaned.get("company_login_password") or "").strip():
-                raise forms.ValidationError("Nayi company ke liye company login password zaroori hai.")
+                raise forms.ValidationError("Company login password is required for new companies.")
         return cleaned
 
 
@@ -177,6 +188,15 @@ class UserAdminForm(forms.ModelForm):
         cleaned = super().clean()
         role = cleaned.get("role")
         company = cleaned.get("company")
+        email = (cleaned.get("email") or "").strip().lower()
+        if email:
+            user_qs = User.objects.filter(email__iexact=email)
+            if self.instance.pk:
+                user_qs = user_qs.exclude(pk=self.instance.pk)
+            if user_qs.exists():
+                raise forms.ValidationError("This email is already used by another user.")
+            if Company.objects.filter(email__iexact=email).exists():
+                raise forms.ValidationError("This email is already used by a company account.")
         if role in [Role.COMPANY_ADMIN, Role.MEMBER] and not company:
             raise forms.ValidationError("Company admin/member ke liye company select karna zaroori hai.")
         if role == Role.SUPER_ADMIN:

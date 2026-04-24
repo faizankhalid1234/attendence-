@@ -1,16 +1,17 @@
-export type DayStatus = "complete" | "pending" | "absent";
+export type DayStatus = "complete" | "pending" | "absent" | "fake";
 
 export type HistoryRow = {
   date: string;
   checkedInAt: string | null;
   checkedOutAt: string | null;
+  isFake?: boolean;
 };
 
 function normDate(iso: string): string {
   return iso.slice(0, 10);
 }
 
-/** Member history se chart rows — `localToday` company calendar anchor (YYYY-MM-DD). */
+/** Build chart rows from member history; `localToday` is the company calendar anchor (YYYY-MM-DD). */
 export function buildMemberDaySeries(
   history: HistoryRow[],
   localToday: string | undefined,
@@ -31,9 +32,10 @@ export function buildMemberDaySeries(
   return dates.map((full) => {
     const row = map.get(full);
     let status: DayStatus = "absent";
-    if (row?.checkedInAt && row.checkedOutAt) status = "complete";
+    if (row?.isFake) status = "fake";
+    else if (row?.checkedInAt && row.checkedOutAt) status = "complete";
     else if (row?.checkedInAt) status = "pending";
-    const statusValue = status === "complete" ? 3 : status === "pending" ? 2 : 1;
+    const statusValue = status === "complete" ? 4 : status === "pending" ? 3 : status === "fake" ? 2 : 1;
     return { day: full.slice(5), full, status, statusValue };
   });
 }
@@ -44,6 +46,6 @@ export function summarizeSeries(rows: { status: DayStatus }[]) {
       a[r.status] += 1;
       return a;
     },
-    { complete: 0, pending: 0, absent: 0 },
+    { complete: 0, pending: 0, absent: 0, fake: 0 },
   );
 }

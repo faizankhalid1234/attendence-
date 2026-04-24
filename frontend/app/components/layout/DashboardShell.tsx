@@ -122,8 +122,8 @@ export default function DashboardShell({ variant, children }: Props) {
 
   const footerHint =
     variant === "home"
-      ? "Home page par mouse ghumao — glow spot move hoga. Slider se colour mood badlein (dashboard jaisa)."
-      : "dashboard par mouse ghumao ya trackpad se hover karo — glow spot move hoga. Neeche slider se colour mood badlein.";
+      ? "Move the mouse over the page — the glow follows your cursor. Use the slider to shift the colour mood."
+      : "Move the mouse or hover with the trackpad — the glow follows you. Use the slider below to adjust colour mood.";
 
   return (
     <div

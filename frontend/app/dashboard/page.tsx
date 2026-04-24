@@ -5,14 +5,13 @@ import { useRouter } from "next/navigation";
 
 export default function DashboardRouter() {
   const router = useRouter();
-  const [hint, setHint] = useState("Checking your account…");
+  const [hint] = useState("Checking your account…");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const role = (sessionStorage.getItem("portalRole") || "").trim();
     if (!role) {
-      setHint("Please log in from the home page first — after login you will be routed automatically.");
       return;
     }
 
@@ -33,7 +32,11 @@ export default function DashboardRouter() {
       return;
     }
 
-    setHint("Unknown role — please log in again.");
+    sessionStorage.removeItem("portalRole");
+    sessionStorage.removeItem("portalCompanyName");
+    sessionStorage.removeItem("portalUserName");
+    window.dispatchEvent(new Event("portalRoleChanged"));
+    router.replace("/");
   }, [router]);
 
   return (

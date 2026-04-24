@@ -16,6 +16,7 @@ import { chartTooltip } from "@/lib/attendanceLabels";
 const FILL: Record<DayStatus, string> = {
   complete: "#22c55e",
   pending: "#f59e0b",
+  fake: "#ef4444",
   absent: "#94a3b8",
 };
 
@@ -34,7 +35,7 @@ export default function StatusBarChart({ data, title }: { data: Row[]; title?: s
           <BarChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200 dark:stroke-zinc-700" vertical={false} />
             <XAxis dataKey="day" tick={{ fontSize: 10, fill: "var(--muted)" }} tickLine={false} axisLine={false} />
-            <YAxis type="number" domain={[0, 3.2]} hide />
+            <YAxis type="number" domain={[0, 4.2]} hide />
             <Tooltip
               contentStyle={{
                 borderRadius: 12,
@@ -66,6 +67,10 @@ export default function StatusBarChart({ data, title }: { data: Row[]; title?: s
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2 w-2 shrink-0 rounded-sm bg-amber-500" />
           <span>Pending</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-sm bg-red-500" />
+          <span>Fake</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2 w-2 shrink-0 rounded-sm bg-slate-400" />

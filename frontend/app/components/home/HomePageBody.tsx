@@ -34,10 +34,10 @@ export default function HomePageBody() {
         <section className="rounded-3xl border border-white/15 bg-[var(--card)]/95 p-8 shadow-2xl shadow-black/30 ring-1 ring-white/10 backdrop-blur-md dark:border-zinc-800 lg:p-10">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Login</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
-            Pehle role chunein, phir apni email aur password — company admin ya member.
+            Choose your role, then sign in with the email and password for a company admin or member account.
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-            English: sign in with the credentials issued from Django Admin — each account has its own email and password.
+            Credentials are issued from Django Admin. Each account has its own email and password.
           </p>
           <div className="mt-8">
             <LoginForm />

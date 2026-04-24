@@ -13,7 +13,7 @@ type ReportMember = {
   name: string;
   email: string;
   series: SeriesPoint[];
-  summary: { complete: number; pending: number; absent: number };
+  summary: { complete: number; pending: number; absent: number; fake?: number };
 };
 
 const card =
@@ -54,6 +54,7 @@ export default function CompanyTeamAttendance() {
   }, [days]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -68,7 +69,7 @@ export default function CompanyTeamAttendance() {
       day: p.date.slice(5),
       full: p.date,
       status: p.status,
-      statusValue: p.status === "complete" ? 3 : p.status === "pending" ? 2 : 1,
+      statusValue: p.status === "complete" ? 4 : p.status === "pending" ? 3 : p.status === "fake" ? 2 : 1,
     }));
   }, [selected]);
 
@@ -78,12 +79,14 @@ export default function CompanyTeamAttendance() {
         complete: a.complete + m.summary.complete,
         pending: a.pending + m.summary.pending,
         absent: a.absent + m.summary.absent,
+        fake: a.fake + (m.summary.fake || 0),
       }),
-      { complete: 0, pending: 0, absent: 0 },
+      { complete: 0, pending: 0, absent: 0, fake: 0 },
     );
     return [
       { name: L.pieComplete, value: t.complete, color: "#22c55e" },
       { name: L.piePending, value: t.pending, color: "#f59e0b" },
+      { name: L.pieFake, value: t.fake, color: "#ef4444" },
       { name: L.pieAbsent, value: t.absent, color: "#94a3b8" },
     ];
   }, [members]);
@@ -186,6 +189,9 @@ export default function CompanyTeamAttendance() {
                   </span>
                   <span className="rounded-full bg-amber-500/15 px-3 py-1 font-semibold text-amber-900 dark:text-amber-200">
                     {L.statusPending}: {selected.summary.pending}
+                  </span>
+                  <span className="rounded-full bg-red-500/15 px-3 py-1 font-semibold text-red-900 dark:text-red-200">
+                    {L.statusFake}: {selected.summary.fake || 0}
                   </span>
                   <span className="rounded-full bg-slate-500/15 px-3 py-1 font-semibold text-slate-700 dark:text-zinc-300">
                     {L.statusAbsent}: {selected.summary.absent}

@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import MemberManager from "@/app/components/company/MemberManager";
 import CompanyTeamAttendance from "@/app/components/company/CompanyTeamAttendance";
 import PageHeader from "@/app/components/layout/PageHeader";
 
 export default function CompanyDashboard() {
-  const [companyName, setCompanyName] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setCompanyName(sessionStorage.getItem("portalCompanyName"));
-    setUserName(sessionStorage.getItem("portalUserName"));
-  }, []);
+  const companyName = useMemo(
+    () => (typeof window === "undefined" ? null : sessionStorage.getItem("portalCompanyName")),
+    [],
+  );
+  const userName = useMemo(
+    () => (typeof window === "undefined" ? null : sessionStorage.getItem("portalUserName")),
+    [],
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-10">
@@ -22,8 +22,8 @@ export default function CompanyDashboard() {
           title={companyName || "Your company"}
           subtitle={
             companyName
-              ? `${userName ? `${userName} · ` : ""}Team, reports aur members yahin se manage hon — shift / map settings Django Admin se set hoti hain.`
-              : "Login ke baad yahan company naam aur tools dikhenge."
+              ? `${userName ? `${userName} · ` : ""}Manage team, reports, and members from here. Shift and map settings are configured from Django Admin.`
+              : "After login, your company name and tools appear here."
           }
           showLogout
           logoutClassName="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-white/20"
@@ -43,8 +43,7 @@ export default function CompanyDashboard() {
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/90">Your role</p>
                 <h2 className="mt-1 text-2xl font-bold tracking-tight">Company administrator</h2>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-emerald-50/95">
-                  Sirf apni company ka data — members add karna, un ki attendance dekhna, charts aur reports. Har section
-                  neeche alag rang / layout se alag kaam dikhaya gaya hai.
+                  This area only shows your company data: add members, review attendance, and check reports.
                 </p>
               </div>
             </div>
@@ -65,8 +64,8 @@ export default function CompanyDashboard() {
               📊
             </span>
             <div>
-              <h2 className="text-lg font-bold text-white sm:text-xl">Block 1 — Team attendance & reports</h2>
-              <p className="text-sm text-emerald-100/80">Charts, date range, har member ka streak — yeh reporting zone hai.</p>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Block 1 — Team attendance & reports</h2>
+              <p className="text-sm text-slate-600 dark:text-emerald-100/80">Charts, date range, and member trends.</p>
             </div>
           </div>
           <div className="rounded-3xl ring-1 ring-emerald-500/20 ring-offset-4 ring-offset-zinc-950">
@@ -80,8 +79,8 @@ export default function CompanyDashboard() {
               👥
             </span>
             <div>
-              <h2 className="text-lg font-bold text-white sm:text-xl">Block 2 — Team members</h2>
-              <p className="text-sm text-violet-100/85">Naye staff ki email se invite; neeche poori list.</p>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Block 2 — Team members</h2>
+              <p className="text-sm text-slate-600 dark:text-violet-100/85">Invite new staff by email and review the full member list.</p>
             </div>
           </div>
           <div className="rounded-3xl ring-1 ring-violet-500/25 ring-offset-4 ring-offset-zinc-950">

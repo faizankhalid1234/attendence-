@@ -26,13 +26,13 @@ const ROLE_OPTIONS = [
   {
     value: "COMPANY_ADMIN" as const,
     title: "Company admin",
-    subtitle: "Company banayi / team manage",
+    subtitle: "Create and manage your team",
     emoji: "🏢",
   },
   {
     value: "MEMBER" as const,
     title: "Member",
-    subtitle: "Attendance mark karna",
+    subtitle: "Mark daily attendance",
     emoji: "👤",
   },
 ];
@@ -141,7 +141,7 @@ export default function LoginForm() {
     <form onSubmit={onSubmit} className="space-y-5">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-500">
-          Pehle apna role chunein
+          Select your role first
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {ROLE_OPTIONS.map((opt) => {
@@ -191,7 +191,7 @@ export default function LoginForm() {
       </div>
 
       <p className="text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
-        Wahi email <strong>kai jagah</strong> (member + company, ya do companies) ho sakti hai — har account ka <strong>password alag</strong> ho sakta hai. Is liye role sahi chunein; agar password sahi ho lekin role galat ho to server hint mein bata dega.
+        Email is globally unique now (company and member). Choose the correct role for your account before login.
       </p>
 
       {memberBanner && (

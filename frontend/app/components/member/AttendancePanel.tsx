@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, readJsonSafe } from "@/lib/api";
+import { getBrowserPosition, haversineKm } from "@/lib/liveLocation";
 import { L } from "@/lib/attendanceLabels";
 import StatusBarChart from "@/app/components/charts/StatusBarChart";
 import SummaryPie from "@/app/components/charts/SummaryPie";
@@ -28,159 +29,12 @@ type Row = {
   checkedOutAt: string | null;
   checkInPhotoUrl: string | null;
   checkOutPhotoUrl: string | null;
+  isFake?: boolean;
 };
 
 type GpsPhase = "none" | "getting" | "ready";
 
-type LocationHelpKind = "permission" | "services" | "timeout" | "unsupported" | "unknown";
-
-function classifyLocationError(err: unknown): LocationHelpKind {
-  if (err instanceof Error && err.message === "no geolocation") return "unsupported";
-  const geoErr = err as GeolocationPositionError | undefined;
-  if (geoErr && typeof geoErr.code === "number") {
-    if (geoErr.code === 1) return "permission";
-    if (geoErr.code === 2) return "services";
-    if (geoErr.code === 3) return "timeout";
-  }
-  return "unknown";
-}
-
-type SavedMemberGps = {
-  companyId: string;
-  lat: number;
-  lng: number;
-  acc?: number;
-  label: string;
-  detail: string;
-  savedAt: number;
-};
-
-const GPS_SESSION_PREFIX = "attendance_member_live_gps:";
-const GPS_SESSION_MAX_AGE_MS = 2 * 60 * 1000;
 const GPS_LOCK_MAX_AGE_BEFORE_SUBMIT_MS = 2 * 60 * 1000;
-const MOBILE_LOC_TIP_KEY = "attendance_mobile_location_tip_dismissed_v1";
-
-function gpsSessionKey(companyId: string) {
-  return `${GPS_SESSION_PREFIX}${companyId}`;
-}
-
-function readGpsSession(companyId: string | undefined): SavedMemberGps | null {
-  if (typeof window === "undefined" || !companyId) return null;
-  try {
-    const raw = sessionStorage.getItem(gpsSessionKey(companyId));
-    if (!raw) return null;
-    const v = JSON.parse(raw) as SavedMemberGps;
-    if (!v || String(v.companyId) !== String(companyId)) return null;
-    if (typeof v.lat !== "number" || typeof v.lng !== "number") return null;
-    if (Date.now() - (v.savedAt || 0) > GPS_SESSION_MAX_AGE_MS) return null;
-    return v;
-  } catch {
-    return null;
-  }
-}
-
-function writeGpsSession(payload: SavedMemberGps) {
-  try {
-    sessionStorage.setItem(gpsSessionKey(payload.companyId), JSON.stringify(payload));
-  } catch {
-    /* private mode / quota */
-  }
-}
-
-/** Human hint when GPS ring is wide — place name can be a nearby area, not exact plot. */
-function gpsAccuracyNote(acc: number | undefined | null): string | null {
-  if (acc == null) return null;
-  if (acc > 400) {
-    return "GPS accuracy bahut weak hai (±400m+). Attendance isi GPS point par save hogi — jagah ka naam map ka nazdeeki ilaqa ho sakta hai. Behtar ke liye khuli jagah par dubara Live GPS dabayein.";
-  }
-  if (acc > 200) {
-    return "GPS accuracy medium hai. Neeche wala naam OpenStreetMap ka is point ke qareeb ka address hai — agar lagta hai galat ilaqa hai to dubara Live GPS try karein (window / bahir).";
-  }
-  if (acc > 80) {
-    return "Chhoti GPS error ho sakti hai — naam thora aas paas ka area dikha sakta hai; lat/long hi aapka exact lock hai.";
-  }
-  return null;
-}
-
-function posToGps(pos: GeolocationPosition): { lat: number; lng: number; acc?: number } {
-  return {
-    lat: pos.coords.latitude,
-    lng: pos.coords.longitude,
-    acc: pos.coords.accuracy ?? undefined,
-  };
-}
-
-function pickBetterFix(a: GeolocationPosition, b: GeolocationPosition): GeolocationPosition {
-  const aa = a.coords.accuracy ?? 1e9;
-  const bb = b.coords.accuracy ?? 1e9;
-  return bb < aa ? b : a;
-}
-
-/**
- * Live device fix: fresh read (`maximumAge: 0`). If accuracy is weak (common indoors / Wi‑Fi),
- * briefly samples `watchPosition` and keeps the **tightest accuracy** reading — closer to where you actually are.
- */
-function acquireRefinedLivePosition(totalTimeoutMs: number): Promise<{ lat: number; lng: number; acc?: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("no geolocation"));
-      return;
-    }
-    const geo = navigator.geolocation;
-    const firstTimeout = Math.max(5000, Math.min(totalTimeoutMs, 30000));
-    const goodEnoughM = 85;
-    const refineMaxMs = Math.min(6000, Math.max(2800, Math.floor(firstTimeout / 4)));
-
-    geo.getCurrentPosition(
-      (first) => {
-        const firstAcc = first.coords.accuracy ?? 1e9;
-        if (firstAcc <= goodEnoughM) {
-          resolve(posToGps(first));
-          return;
-        }
-
-        let best = first;
-        let settled = false;
-        let watchId: number | null = null;
-        let timerId: number | null = null;
-
-        const cleanup = () => {
-          if (watchId !== null) {
-            geo.clearWatch(watchId);
-            watchId = null;
-          }
-          if (timerId !== null) {
-            window.clearTimeout(timerId);
-            timerId = null;
-          }
-        };
-
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          resolve(posToGps(best));
-        };
-
-        watchId = geo.watchPosition(
-          (pos) => {
-            best = pickBetterFix(best, pos);
-            const acc = pos.coords.accuracy ?? 1e9;
-            if (acc <= 45) finish();
-          },
-          () => {
-            /* ignore transient watch errors */
-          },
-          { enableHighAccuracy: true, maximumAge: 0, timeout: refineMaxMs + 4000 },
-        ) as unknown as number;
-
-        timerId = window.setTimeout(finish, refineMaxMs) as unknown as number;
-      },
-      (err) => reject(err),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: firstTimeout },
-    );
-  });
-}
 
 function formatCompanyDateTime(iso: string | null, tz: string): string {
   if (!iso) return "-";
@@ -215,6 +69,13 @@ function formatCompanyDateTime(iso: string | null, tz: string): string {
 }
 
 function rowStatusMeta(row: Row): { primary: string; detail: string; className: string } {
+  if (row.isFake) {
+    return {
+      primary: L.statusFake,
+      detail: L.statusFakeDetail,
+      className: "bg-red-100 text-red-800 dark:bg-red-950/55 dark:text-red-200",
+    };
+  }
   if (row.checkedInAt && row.checkedOutAt) {
     return {
       primary: L.statusComplete,
@@ -244,15 +105,10 @@ export default function AttendancePanel() {
   const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lng: number; acc?: number } | null>(null);
+  const [submitKind, setSubmitKind] = useState<null | "check_in" | "check_out">(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsPhase, setGpsPhase] = useState<GpsPhase>("none");
-  const [locationLabel, setLocationLabel] = useState("");
-  const [locationDetail, setLocationDetail] = useState("");
-  const [locationLabelLoading, setLocationLabelLoading] = useState(false);
-  const [locationHelpOpen, setLocationHelpOpen] = useState(false);
-  const [locationHelpKind, setLocationHelpKind] = useState<LocationHelpKind>("unknown");
-  const [showMobileLocTip, setShowMobileLocTip] = useState(false);
-  const [locationQualityNote, setLocationQualityNote] = useState<string | null>(null);
+  const [gpsError, setGpsError] = useState("");
   const [isDemoViewer, setIsDemoViewer] = useState(false);
   const [coordsCapturedAt, setCoordsCapturedAt] = useState<number | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -260,10 +116,6 @@ export default function AttendancePanel() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const getLocationRef = useRef<(opts?: { suppressRepeatedPermissionModal?: boolean }) => void>(() => {});
-  const retryGpsOnVisibleRef = useRef(false);
-  /** After "Allow this site location", avoid reopening the same modal in a loop if still blocked. */
-  const skipNextPermissionDeniedModalRef = useRef(false);
 
   const tz = company?.timezone || "Asia/Karachi";
 
@@ -316,44 +168,9 @@ export default function AttendancePanel() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  useEffect(() => {
-    try {
-      const dismissed = sessionStorage.getItem(MOBILE_LOC_TIP_KEY);
-      const mobile = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      setShowMobileLocTip(Boolean(mobile && !dismissed));
-    } catch {
-      setShowMobileLocTip(false);
-    }
-  }, []);
-
-  /** Restore last successful live GPS lock for this company (same browser tab session). */
-  useEffect(() => {
-    const id = company?.id;
-    if (!id) return;
-    const saved = readGpsSession(String(id));
-    if (!saved) return;
-    setCoords({ lat: saved.lat, lng: saved.lng, acc: saved.acc });
-    setCoordsCapturedAt(saved.savedAt || Date.now());
-    setLocationLabel(saved.label);
-    setLocationDetail(saved.detail);
-    setLocationQualityNote(gpsAccuracyNote(saved.acc));
-    setGpsPhase("ready");
-    setLocationLabelLoading(false);
-  }, [company?.id]);
-
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState !== "visible") return;
-      if (!retryGpsOnVisibleRef.current) return;
-      retryGpsOnVisibleRef.current = false;
-      getLocationRef.current({ suppressRepeatedPermissionModal: true });
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, []);
 
   const stopCamera = () => {
     setCameraReady(false);
@@ -408,7 +225,7 @@ export default function AttendancePanel() {
       const stream = await tryStream({ video: true, audio: false });
       await attach(stream);
     } catch {
-      setMessage("Allow camera access — photos are captured from the live camera only (no gallery picker).");
+      setMessage("Allow camera access. Photos are captured from the live camera only (no gallery upload).");
     }
   };
 
@@ -452,183 +269,126 @@ export default function AttendancePanel() {
     );
   };
 
-  const openLocationHelp = (kind: LocationHelpKind) => {
-    setLocationHelpKind(kind);
-    setLocationHelpOpen(true);
-  };
-
-  const dismissMobileLocTip = () => {
-    try {
-      sessionStorage.setItem(MOBILE_LOC_TIP_KEY, "1");
-    } catch {
-      /* noop */
-    }
-    setShowMobileLocTip(false);
-  };
-
-  const getLocation = (options?: { suppressRepeatedPermissionModal?: boolean }) => {
-    const suppressRepeated = Boolean(options?.suppressRepeatedPermissionModal);
-    skipNextPermissionDeniedModalRef.current = suppressRepeated;
-
-    if (!navigator.geolocation) {
-      skipNextPermissionDeniedModalRef.current = false;
-      setMessage("");
-      setLocationHelpOpen(false);
-      setLocationQualityNote(null);
-      openLocationHelp("unsupported");
-      return;
-    }
-
-    const companyIdForSave = String(company?.id || selectedCompanyId || "");
-
-    // Register getCurrentPosition BEFORE any setState. Some mobile browsers only show
-    // the native Allow prompt if geolocation is requested in the same synchronous
-    // stack as the user tap — setState first can break that activation chain.
-    const pending = acquireRefinedLivePosition(20000);
-
+  /** Same pattern as Live-Location: one getCurrentPosition on button tap (prompt stays tied to the click). */
+  const getLocation = useCallback(() => {
     setMessage("");
-    setLocationHelpOpen(false);
-    setLocationQualityNote(null);
-    retryGpsOnVisibleRef.current = false;
+    setGpsError("");
+    const pending = getBrowserPosition();
     setGpsPhase("getting");
-    setLocationLabel("");
-    setLocationDetail("");
-    setLocationLabelLoading(false);
     setCoords(null);
-
+    setCoordsCapturedAt(null);
     void pending
-      .then(async (next) => {
+      .then((next) => {
         setCoords(next);
         setCoordsCapturedAt(Date.now());
         setGpsPhase("ready");
-        setLocationLabelLoading(true);
-        let main = "";
-        let detail = "";
-        try {
-          const res = await apiFetch(
-            `/api/member/location-label?latitude=${encodeURIComponent(String(next.lat))}&longitude=${encodeURIComponent(String(next.lng))}`,
-          );
-          const data = ((await readJsonSafe(res)) || {}) as {
-            label?: string;
-            displayName?: string;
-            latitude?: number;
-            longitude?: number;
-          };
-          const fallback = `${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`;
-          main = res.ok && data.label?.trim() ? data.label.trim() : fallback;
-          const dn = data.displayName?.trim() || "";
-          detail = dn && dn.toLowerCase() !== main.toLowerCase() ? dn : "";
-          setLocationLabel(main);
-          setLocationDetail(detail);
-        } catch {
-          main = `${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`;
-          detail = "";
-          setLocationLabel(main);
-          setLocationDetail("");
-        } finally {
-          setLocationLabelLoading(false);
-        }
-        setLocationQualityNote(gpsAccuracyNote(next.acc));
-        if (companyIdForSave) {
-          writeGpsSession({
-            companyId: companyIdForSave,
-            lat: next.lat,
-            lng: next.lng,
-            acc: next.acc,
-            label: main,
-            detail,
-            savedAt: Date.now(),
-          });
-        }
-        retryGpsOnVisibleRef.current = false;
-        skipNextPermissionDeniedModalRef.current = false;
       })
       .catch((err: unknown) => {
         setGpsPhase("none");
         setCoordsCapturedAt(null);
-        const kind = classifyLocationError(err);
-        if (kind === "services" || kind === "timeout") {
-          retryGpsOnVisibleRef.current = true;
-        }
-        if (kind === "permission" && skipNextPermissionDeniedModalRef.current) {
-          retryGpsOnVisibleRef.current = true;
-          skipNextPermissionDeniedModalRef.current = false;
-          setMessage(
-            "Site location abhi bhi allow nahi hui (ya pehle Block ho chuki hai). Address bar ka lock / info icon → Site settings → Location → Allow. Phir neeche \"Live GPS — location lock\" dubara dabayein.",
-          );
+        const msg = err instanceof Error ? err.message : "Unable to fetch your location.";
+        setGpsError(msg);
+      });
+  }, []);
+
+  const markAttendance = async (action: "check_in" | "check_out") => {
+    setMessage("");
+    setSubmitKind(action);
+    setLoading(true);
+    try {
+      if (isDemoViewer) {
+        setMessage("Demo user is view-only. Attendance marking is disabled.");
+        return;
+      }
+
+      const rowToday =
+        company?.localToday != null
+          ? history.find((r) => r.date === company.localToday)
+          : undefined;
+
+      if (action === "check_in") {
+        if (rowToday?.checkedInAt && rowToday.checkedOutAt) {
+          setMessage(L.hintSubmitComplete);
           return;
         }
-        skipNextPermissionDeniedModalRef.current = false;
-        openLocationHelp(kind);
-      });
-  };
+        if (rowToday?.checkedInAt && !rowToday.checkedOutAt) {
+          setMessage(L.hintSubmitCheckInBlocked);
+          return;
+        }
+      }
+      if (action === "check_out") {
+        if (!rowToday?.checkedInAt) {
+          setMessage(L.hintSubmitCheckOutNeedsIn);
+          return;
+        }
+        if (rowToday.checkedOutAt) {
+          setMessage(L.hintSubmitCheckOutDone);
+          return;
+        }
+      }
 
-  getLocationRef.current = getLocation;
+      if (!coordsCapturedAt || Date.now() - coordsCapturedAt > GPS_LOCK_MAX_AGE_BEFORE_SUBMIT_MS) {
+        setMessage('Your location lock has expired. Tap "Get my location" again to capture a fresh point.');
+        return;
+      }
+      if (!coords) {
+        setMessage('Tap "Get my location" first and allow the browser when it asks for this site.');
+        return;
+      }
+      if (company?.id && selectedCompanyId && selectedCompanyId !== company.id) {
+        setMessage("The selected company does not match your account company.");
+        return;
+      }
+      if (!photoFile) {
+        setMessage("Capture a live photo from the camera (no gallery uploads).");
+        return;
+      }
 
-  const markAttendance = async () => {
-    setLoading(true);
-    setMessage("");
-    if (isDemoViewer) {
-      setMessage("Demo user is view-only. Attendance marking is disabled.");
-      setLoading(false);
-      return;
-    }
-    if (!coordsCapturedAt || Date.now() - coordsCapturedAt > GPS_LOCK_MAX_AGE_BEFORE_SUBMIT_MS) {
-      setMessage("Live GPS lock purani ho chuki hai. Current location ke liye dobara \"Live GPS — location lock\" dabayein.");
-      setLoading(false);
-      return;
-    }
-    if (!coords) {
-      setMessage('Use "Live GPS — location lock" first to capture your location.');
-      setLoading(false);
-      return;
-    }
-    if (company?.id && selectedCompanyId && selectedCompanyId !== company.id) {
-      setMessage("The selected company does not match your account company.");
-      setLoading(false);
-      return;
-    }
-    if (!photoFile) {
-      setMessage("Capture a live photo from the camera (no gallery uploads).");
-      setLoading(false);
-      return;
-    }
+      const effectiveCompanyId = String(company?.id || selectedCompanyId || "");
+      if (!effectiveCompanyId) {
+        setMessage("Your company is missing on this account. Contact admin.");
+        return;
+      }
 
-    const effectiveCompanyId = String(company?.id || selectedCompanyId || "");
-    if (!effectiveCompanyId) {
-      setMessage("Your company is missing on this account. Contact admin.");
+      const form = new FormData();
+      form.append("companyId", effectiveCompanyId);
+      form.append("latitude", String(coords.lat));
+      form.append("longitude", String(coords.lng));
+      form.append("action", action);
+      form.append("photo", photoFile, photoFile.name);
+
+      const res = await apiFetch("/api/member/attendance", { method: "POST", body: form });
+      const data = ((await readJsonSafe(res)) || {}) as Record<string, unknown>;
+      if (!res.ok) {
+        const hint = typeof data.hint === "string" ? data.hint : "";
+        const cur = typeof data.currentLocalTime === "string" ? data.currentLocalTime : "";
+        const extra = hint || (cur ? `Company timezone — local time now: ${cur}` : "");
+        setMessage(String(data.error || "Attendance fail") + (extra ? ` — ${extra}` : ""));
+        return;
+      }
+      if (Boolean(data.isFake)) {
+        setMessage(`${String(data.message || "Saved")} — Status: Fake (outside company radius).`);
+      } else {
+        setMessage(String(data.message || "Saved"));
+      }
+      setPhotoFile(null);
+      await load();
+    } finally {
       setLoading(false);
-      return;
+      setSubmitKind(null);
     }
-
-    const form = new FormData();
-    form.append("companyId", effectiveCompanyId);
-    form.append("latitude", String(coords.lat));
-    form.append("longitude", String(coords.lng));
-    form.append("photo", photoFile, photoFile.name);
-
-    const res = await apiFetch("/api/member/attendance", { method: "POST", body: form });
-    const data = ((await readJsonSafe(res)) || {}) as Record<string, unknown>;
-    setLoading(false);
-    if (!res.ok) {
-      const hint = typeof data.hint === "string" ? data.hint : "";
-      const cur = typeof data.currentLocalTime === "string" ? data.currentLocalTime : "";
-      const extra = hint || (cur ? `Company timezone — local time now: ${cur}` : "");
-      setMessage(String(data.error || "Attendance fail") + (extra ? ` — ${extra}` : ""));
-      return;
-    }
-    setMessage(String(data.message || "OK"));
-    setPhotoFile(null);
-    await load();
   };
 
   const todayRow = company?.localToday ? history.find((r) => r.date === company.localToday) : undefined;
+  const canSubmitCheckIn = Boolean(company?.localToday && !todayRow?.checkedInAt);
+  const canSubmitCheckOut = Boolean(company?.localToday && todayRow?.checkedInAt && !todayRow?.checkedOutAt);
+  const todayAttendanceDone = Boolean(todayRow?.checkedInAt && todayRow?.checkedOutAt);
   const displayCompanyName = company?.name || companiesList.find((c) => c.id === selectedCompanyId)?.name || "";
 
   const memberSeries = useMemo(
     () =>
       buildMemberDaySeries(
-        history.map((r) => ({ date: r.date, checkedInAt: r.checkedInAt, checkedOutAt: r.checkedOutAt })),
+        history.map((r) => ({ date: r.date, checkedInAt: r.checkedInAt, checkedOutAt: r.checkedOutAt, isFake: r.isFake })),
         company?.localToday,
         14,
       ),
@@ -639,195 +399,22 @@ export default function AttendancePanel() {
     () => [
       { name: L.pieComplete, value: memberSummary.complete, color: "#22c55e" },
       { name: L.piePending, value: memberSummary.pending, color: "#f59e0b" },
+      { name: L.pieFake, value: memberSummary.fake, color: "#ef4444" },
       { name: L.pieAbsent, value: memberSummary.absent, color: "#94a3b8" },
     ],
     [memberSummary],
   );
 
-  const locationHelpCopy: Record<LocationHelpKind, { title: string; body: ReactNode }> = {
-    permission: {
-      title: "Is site ko location allow karein",
-      body: (
-        <div className="space-y-3 text-sm leading-relaxed text-slate-600 dark:text-zinc-300">
-          <p>
-            <strong className="text-slate-800 dark:text-zinc-100">Allow this site location</strong> sirf browser se
-            ijazat mangta hai (native Allow / Block). Phone / laptop ki <strong>Location / GPS</strong> alag se ON honi
-            chahiye — phir hi sahi current point milta hai.
-          </p>
-          <p className="text-xs text-slate-500 dark:text-zinc-500">
-            Agar pehle <strong>Block</strong> kar diya tha to browser dubara bar bar popup nahi dikhata — site settings
-            se Allow karna padta hai; is button se dobara spam nahi hoga.
-          </p>
-          <details className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs dark:border-zinc-600 dark:bg-zinc-800/60">
-            <summary className="cursor-pointer font-semibold text-slate-800 dark:text-zinc-200">
-              Block / settings se kaise Allow karein?
-            </summary>
-            <ul className="mt-2 list-inside list-disc space-y-1.5 text-slate-700 dark:text-zinc-300">
-              <li>
-                <strong>Chrome / Edge:</strong> lock icon → Site settings → Location → <strong>Allow</strong> → refresh.
-              </li>
-              <li>
-                <strong>Firefox:</strong> permission icon → Location → Allow.
-              </li>
-              <li>
-                <strong>Safari:</strong> Settings → Safari → Location → Ask / Allow.
-              </li>
-            </ul>
-          </details>
-        </div>
-      ),
-    },
-    services: {
-      title: "Device par Location / GPS band hai",
-      body: (
-        <div className="space-y-3 text-sm text-slate-600 dark:text-zinc-300">
-          <p>
-            Browser theek hai, lekin system ne location fix nahi di. Apne phone / laptop par{" "}
-            <strong>Location services ON</strong> karein. Settings se wapas is tab par aate hi app{" "}
-            <strong>ek dafa khud</strong> location dubara read karne ki koshish karegi; warna{" "}
-            <strong>Live GPS</strong> dubara dabayein.
-          </p>
-          <ul className="list-inside list-disc space-y-1.5 text-slate-700 dark:text-zinc-200">
-            <li>
-              <strong>Android:</strong> Settings → Location → <strong>On</strong> (High accuracy / Google Location
-              Accuracy on rakhein).
-            </li>
-            <li>
-              <strong>iPhone:</strong> Settings → Privacy &amp; Security → Location Services → <strong>On</strong> →
-              Safari / Chrome me bhi Allow.
-            </li>
-            <li>
-              <strong>Windows:</strong> Settings → Privacy &amp; security → Location → Location services{" "}
-              <strong>On</strong>.
-            </li>
-          </ul>
-        </div>
-      ),
-    },
-    timeout: {
-      title: "Location abhi mili nahi (timeout)",
-      body: (
-        <p className="text-sm text-slate-600 dark:text-zinc-300">
-          Signal weak ho sakta hai — thodi der baad dubara try karein; behtar ke liye khuli jagah / window ke paas
-          khade ho kar <strong>Live GPS</strong> dubara dabayein.
-        </p>
-      ),
-    },
-    unsupported: {
-      title: "Is browser me location support nahi",
-      body: (
-        <p className="text-sm text-slate-600 dark:text-zinc-300">
-          Secure context (HTTPS / localhost) me Chrome / Edge / Safari try karein — ya browser update karein.
-        </p>
-      ),
-    },
-    unknown: {
-      title: "Location nahi mil saki",
-      body: (
-        <p className="text-sm text-slate-600 dark:text-zinc-300">
-          Neeche <strong>Allow this site location</strong> se dubara koshish karein. Phir bhi masla ho to phone ki
-          Location ON karein aur <strong>Live GPS</strong> dubara dabayein.
-        </p>
-      ),
-    },
-  };
-
-  const locationHelpPrimaryLabel =
-    locationHelpKind === "unsupported"
-      ? "Theek"
-      : locationHelpKind === "services" || locationHelpKind === "timeout"
-        ? "Dobara location lo"
-        : "Allow this site location";
-
-  const onLocationHelpPrimary = () => {
-    if (locationHelpKind === "unsupported") {
-      setLocationHelpOpen(false);
-      return;
-    }
-    // Do not setState here before getLocation — let getLocation register GPS first (same tap).
-    getLocation({
-      suppressRepeatedPermissionModal:
-        locationHelpKind === "permission" || locationHelpKind === "unknown",
-    });
-  };
+  const officeDistanceKm = useMemo(() => {
+    if (!coords || !company) return null;
+    const olat = company.officeLatitude;
+    const olng = company.officeLongitude;
+    if (!Number.isFinite(olat) || !Number.isFinite(olng)) return null;
+    return haversineKm(coords.lat, coords.lng, olat, olng);
+  }, [coords, company]);
 
   return (
     <div className="space-y-6">
-      {showMobileLocTip && !loadError && (
-        <div
-          role="alert"
-          className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 shadow-md dark:border-amber-600 dark:bg-amber-950/35"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="font-bold text-amber-950 dark:text-amber-100">Pehle location sahi ON karein (mobile web)</p>
-              <ol className="mt-2 list-inside list-decimal space-y-1.5 text-sm text-amber-950/95 dark:text-amber-100/95">
-                <li>Phone <strong>Settings → Location</strong> ON (High accuracy / Google Location Accuracy ON rakhein).</li>
-                <li>
-                  <strong>Live GPS</strong> dabate waqt browser ka popup aaye to <strong>Allow / While using the app</strong>{" "}
-                  zaroor choose karein.
-                </li>
-                <li>Mumkin ho to <strong>khuli jagah / window</strong> ke paas — taake current point sahi aaye.</li>
-              </ol>
-              <p className="mt-2 text-xs text-amber-900/90 dark:text-amber-200/90">
-                Attendance me <strong>lat / long wahi save</strong> hoti hai jo device deta hai; neeche wala naam map ka
-                nazdeeki pata ho sakta hai.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={dismissMobileLocTip}
-              className="shrink-0 rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-            >
-              Samajh gaya
-            </button>
-          </div>
-        </div>
-      )}
-
-      {locationHelpOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex flex-col items-stretch justify-start bg-slate-900/55 px-3 pb-6 pt-3 backdrop-blur-md sm:items-center sm:justify-center sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="location-help-title"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setLocationHelpOpen(false);
-          }}
-        >
-          <div
-            className="mx-auto max-h-[min(92vh,720px)] w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-zinc-600 dark:bg-zinc-900 sm:max-h-[85vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 px-5 pb-5 pt-6 text-white">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-100/90">Attendance</p>
-              <h2 id="location-help-title" className="mt-1 text-xl font-bold leading-snug">
-                {locationHelpCopy[locationHelpKind].title}
-              </h2>
-            </div>
-            <div className="max-h-[50vh] overflow-y-auto px-5 py-4 sm:max-h-[45vh]">
-              {locationHelpCopy[locationHelpKind].body}
-            </div>
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/90 p-4 dark:border-zinc-700 dark:bg-zinc-950/80">
-              <button
-                type="button"
-                onClick={onLocationHelpPrimary}
-                className="w-full rounded-2xl bg-indigo-600 py-3.5 text-center text-base font-bold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-500 active:scale-[0.99]"
-              >
-                {locationHelpPrimaryLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLocationHelpOpen(false)}
-                className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Later
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {loadError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{loadError}</div>
       )}
@@ -879,6 +466,9 @@ export default function AttendancePanel() {
               <span className="rounded-full bg-amber-500/15 px-3 py-1 font-semibold text-amber-900 dark:text-amber-200">
                 {L.statusPending}: {memberSummary.pending}
               </span>
+              <span className="rounded-full bg-red-500/15 px-3 py-1 font-semibold text-red-900 dark:text-red-200">
+                {L.statusFake}: {memberSummary.fake}
+              </span>
               <span className="rounded-full bg-slate-500/15 px-3 py-1 font-semibold text-slate-700 dark:text-zinc-300">
                 {L.statusAbsent}: {memberSummary.absent}
               </span>
@@ -902,102 +492,82 @@ export default function AttendancePanel() {
       )}
 
       <section
-        className={`rounded-2xl border-2 p-6 shadow-sm transition-colors ${
-          gpsPhase === "ready" && coords && !locationLabelLoading
-            ? "border-emerald-400 bg-gradient-to-br from-emerald-50 via-white to-sky-50"
-            : "border-slate-200 bg-slate-50/90"
+        className={`rounded-2xl border-2 p-5 shadow-sm transition-colors sm:p-6 ${
+          gpsPhase === "ready" && coords
+            ? "border-sky-300/90 bg-gradient-to-br from-sky-50/90 via-white to-violet-50/50 dark:border-sky-700/60 dark:from-sky-950/25 dark:via-zinc-900 dark:to-violet-950/20"
+            : "border-slate-200 bg-slate-50/90 dark:border-zinc-700 dark:bg-zinc-900/60"
         }`}
       >
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Live status</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-400">Your location</p>
+        <p className="mt-3 text-sm leading-relaxed text-slate-700 dark:text-zinc-300">
+          Turn on <strong>device location / GPS</strong>, then tap <strong>Get my location</strong> below. When the browser asks, choose{" "}
+          <strong>Allow</strong> for this site so attendance can read your coordinates.
+        </p>
 
-        {gpsPhase === "none" && (
-          <p className="mt-3 text-sm text-slate-600">
-            Tap <strong>Live GPS</strong> below — browser ka <strong>native</strong> prompt (Allow / Block) pehli dafa
-            aa sakta hai; <strong>Allow</strong> karein taake current location mile. Phir yahan place name dikhega.
-          </p>
+        {gpsError && (
+          <div
+            role="alert"
+            className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-100"
+          >
+            {gpsError}
+          </div>
         )}
 
         {gpsPhase === "getting" && (
-          <p className="mt-3 text-base font-medium text-slate-800">
-            Aapki <strong>live location</strong> le rahe hain (purani cache nahi). Agar pehla pin door lage to 2–6
-            second tak GPS thori refine hoti hai taake <strong>zyada sahi point</strong> save ho. Khuli jagah / window
-            behtar hai.
-          </p>
+          <p className="mt-3 text-base font-medium text-slate-800 dark:text-zinc-100">Getting your location…</p>
         )}
 
-        {gpsPhase === "ready" && coords && locationLabelLoading && (
-          <p className="mt-3 text-base font-medium text-slate-800">Looking up place name…</p>
-        )}
-
-        {gpsPhase === "ready" && coords && !locationLabelLoading && (
-          <div className="mt-3 space-y-3">
+        {gpsPhase === "ready" && coords && (
+          <div className="mt-4 space-y-3">
             <div className="rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-zinc-600 dark:bg-zinc-900/70">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                Device GPS point (attendance isi par save hoti hai)
+                Coordinates (saved with attendance)
               </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-                Ye lat/lng <strong>phone / browser ki live reading</strong> hai — app khud coordinates nahi banati.
-                Weak GPS par ghar ke Wi‑Fi se pin door bhi aa sakta hai; dubara <strong>Live GPS</strong> bahir try
-                karein.
-              </p>
-              <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-900 dark:text-zinc-100">
+              <p className="mt-2 break-all font-mono text-sm font-semibold text-slate-900 dark:text-zinc-100">
                 {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
               </p>
-              {coords.acc != null && (
-                <p className="mt-1 text-xs text-slate-600 dark:text-zinc-400">
-                  Accuracy (device): ±{Math.round(coords.acc)}m — ye circle ke andar aap ho sakte hain.
-                </p>
-              )}
               <a
-                href={`https://www.openstreetmap.org/?mlat=${encodeURIComponent(String(coords.lat))}&mlon=${encodeURIComponent(String(coords.lng))}#map=19/${coords.lat}/${coords.lng}`}
+                href={`https://www.google.com/maps?q=${encodeURIComponent(`${coords.lat},${coords.lng}`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 inline-block text-sm font-semibold text-indigo-600 underline hover:text-indigo-500 dark:text-indigo-400"
+                className="mt-2 inline-block text-sm font-semibold text-sky-600 underline decoration-sky-300/80 underline-offset-2 hover:text-sky-500 dark:text-sky-400 dark:decoration-sky-600/50"
               >
-                Map par ye point khud check karein →
+                Open in Google Maps →
               </a>
             </div>
-
-            {locationQualityNote && (
-              <div
-                role="alert"
-                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
-              >
-                {locationQualityNote}
-              </div>
-            )}
-
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                Jagah ka naam (map — nazdeeki pata ho sakta hai)
-              </p>
-              <p className="mt-1 text-xl font-bold leading-snug text-slate-900 sm:text-2xl dark:text-white">
-                {locationLabel}
-              </p>
-            </div>
-            {locationDetail && (
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-zinc-400" title={locationDetail}>
-                <span className="font-semibold text-slate-700 dark:text-zinc-300">Poora pata: </span>
-                {locationDetail.length > 220 ? `${locationDetail.slice(0, 220)}…` : locationDetail}
+            {officeDistanceKm != null && (
+              <p className="text-sm text-slate-700 dark:text-zinc-300">
+                Approx. distance to company office:{" "}
+                <strong>
+                  {officeDistanceKm < 1
+                    ? `${Math.round(officeDistanceKm * 1000)} m`
+                    : `${officeDistanceKm.toFixed(2)} km`}
+                </strong>
+                {company?.locationRadiusMeters != null ? (
+                  <span className="text-slate-500 dark:text-zinc-500">
+                    {" "}
+                    (allowed radius {Math.round(company.locationRadiusMeters)} m)
+                  </span>
+                ) : null}
               </p>
             )}
-            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              Lock ho chuka — attendance inhi coordinates ke sath jayegi.
+            <p className="text-sm font-semibold text-sky-800 dark:text-sky-300">
+              Location captured. Attendance will be submitted with these coordinates.
             </p>
           </div>
         )}
-      </section>
 
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          disabled={gpsPhase === "getting"}
-          onClick={() => getLocation()}
-          className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow hover:bg-slate-800 disabled:opacity-60"
-        >
-          {gpsPhase === "getting" ? "Getting location…" : "Live GPS — location lock"}
-        </button>
-      </div>
+        <div className="mt-4 border-t border-slate-200/80 pt-3 dark:border-zinc-700">
+          <button
+            type="button"
+            disabled={gpsPhase === "getting" || loading}
+            onClick={() => getLocation()}
+            className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-cyan-500 hover:to-sky-500 disabled:opacity-55 dark:from-cyan-500 dark:to-sky-500 dark:hover:from-cyan-400 dark:hover:to-sky-400"
+          >
+            {gpsPhase === "getting" ? "Getting location…" : "Get my location"}
+          </button>
+        </div>
+      </section>
 
       {company?.localToday && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -1050,36 +620,40 @@ export default function AttendancePanel() {
             </span>{" "}
             ({company.timezone})
             <span className="block pt-1 text-xs font-normal text-slate-500">
-              Attendance aapki live location par hoti hai — user jahan bhi ho, location name capture ho jata hai.
+              Attendance uses your live location. If you are outside the company radius, status will be marked as Fake.
             </span>
           </p>
         )}
 
-        <h3 className="mt-4 text-base font-semibold text-slate-900">Live camera (capture only — no gallery)</h3>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <h3 className="mt-4 text-base font-semibold text-slate-900 dark:text-zinc-100">{L.cameraSectionTitle}</h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">{L.cameraSectionHelp}</p>
+        <div className="mt-3 inline-flex w-full max-w-lg flex-wrap gap-1 rounded-xl border border-sky-100 bg-sky-50/40 p-1 shadow-inner dark:border-sky-900/40 dark:bg-sky-950/20">
           <button
             type="button"
             onClick={startCamera}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+            disabled={loading}
+            className="min-h-[38px] flex-1 rounded-lg border border-transparent bg-white/90 px-2.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white disabled:opacity-50 dark:bg-zinc-800/90 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:px-3 sm:text-sm"
           >
-            Camera start
+            {L.cameraStart}
           </button>
           <button
             type="button"
             onClick={capturePhoto}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500"
+            disabled={loading}
+            className="min-h-[38px] flex-1 rounded-lg bg-cyan-600 px-2.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:opacity-50 dark:bg-cyan-600 dark:hover:bg-cyan-500 sm:px-3 sm:text-sm"
           >
-            Live capture
+            {L.cameraCapture}
           </button>
           <button
             type="button"
             onClick={stopCamera}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            disabled={loading}
+            className="min-h-[38px] flex-1 rounded-lg border border-slate-200/80 bg-white/80 px-2.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900/80 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:px-3 sm:text-sm"
           >
-            Stop camera
+            {L.cameraStop}
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-slate-500 dark:text-zinc-400">
           {cameraReady ? "Camera ready — tap Capture." : "After starting the camera, wait briefly for the preview."}
         </p>
         <video
@@ -1094,63 +668,88 @@ export default function AttendancePanel() {
         />
         <canvas ref={canvasRef} className="hidden" />
         {photoFile && (
-          <p className="mt-2 text-xs font-medium text-emerald-700">Live photo ready ({Math.round(photoFile.size / 1024)} KB)</p>
+          <p className="mt-2 text-xs font-medium text-cyan-700 dark:text-cyan-400">
+            Live photo ready ({Math.round(photoFile.size / 1024)} KB)
+          </p>
         )}
 
-        <form
-          className="mt-8 border-t border-slate-200 pt-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            void markAttendance();
-          }}
-        >
-          <p className="mb-3 text-center text-xs font-medium uppercase tracking-wide text-slate-500">
-            Mark attendance here
-          </p>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-2xl bg-blue-600 py-4 text-center text-base font-bold text-white shadow-lg transition hover:bg-blue-500 disabled:opacity-50 sm:py-5"
-          >
-            {loading ? "Sending…" : "Mark attendance (check-in / check-out)"}
-          </button>
-          <p className="mt-2 text-center text-xs text-slate-500">
-            First submit = check-in · second submit same day = check-out
-          </p>
-        </form>
+        <div className="mt-7 space-y-3 border-t border-slate-200 pt-5 dark:border-zinc-700">
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-zinc-100">{L.submitSectionTitle}</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-zinc-400">{L.submitSectionHelp}</p>
+          </div>
+          {company?.localToday && (
+            <p className="rounded-lg border border-sky-100 bg-sky-50/70 px-2.5 py-1.5 text-center text-[11px] font-medium text-sky-900/90 dark:border-sky-900/35 dark:bg-sky-950/30 dark:text-sky-100/90">
+              {todayAttendanceDone && L.hintSubmitComplete}
+              {!todayAttendanceDone && canSubmitCheckIn && L.submitNextCheckIn}
+              {!todayAttendanceDone && canSubmitCheckOut && L.submitNextCheckOut}
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+            <div className="flex flex-col gap-1.5 rounded-xl border border-cyan-200/80 bg-gradient-to-b from-cyan-50/80 to-white p-3 shadow-sm dark:border-cyan-900/40 dark:from-cyan-950/25 dark:to-zinc-900/95">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">
+                {L.submitCardArrivalTag}
+              </p>
+              <button
+                type="button"
+                disabled={loading || isDemoViewer || !company?.localToday || !canSubmitCheckIn}
+                onClick={() => void markAttendance("check_in")}
+                className="w-full rounded-lg bg-cyan-600 py-2 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-cyan-600 dark:hover:bg-cyan-500"
+              >
+                {loading && submitKind === "check_in" ? L.submittingCheckIn : L.btnSubmitCheckIn}
+              </button>
+              <p className="text-center text-[10px] leading-snug text-slate-600 dark:text-zinc-400">
+                {L.submitCardArrivalHelp}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5 rounded-xl border border-violet-200/80 bg-gradient-to-b from-violet-50/80 to-white p-3 shadow-sm dark:border-violet-900/40 dark:from-violet-950/25 dark:to-zinc-900/95">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-violet-800 dark:text-violet-300">
+                {L.submitCardLeavingTag}
+              </p>
+              <button
+                type="button"
+                disabled={loading || isDemoViewer || !company?.localToday || !canSubmitCheckOut}
+                onClick={() => void markAttendance("check_out")}
+                className="w-full rounded-lg bg-violet-600 py-2 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-violet-600 dark:hover:bg-violet-500"
+              >
+                {loading && submitKind === "check_out" ? L.submittingCheckOut : L.btnSubmitCheckOut}
+              </button>
+              <p className="text-center text-[10px] leading-snug text-slate-600 dark:text-zinc-400">
+                {L.submitCardLeavingHelp}
+              </p>
+            </div>
+          </div>
+        </div>
 
         {message && <p className="mt-4 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">{message}</p>}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100">
-          <span className="font-bold">{L.recordsTitle}</span>
-          <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-zinc-400">Timezone: {tz}</span>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-950 shadow-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-slate-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50">
+          <span className="text-sm font-bold">{L.recordsTitle}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400">
+          <table className="w-full min-w-[640px] text-left text-sm text-inherit">
+            <thead className="bg-slate-100 text-slate-950 dark:bg-zinc-800 dark:text-zinc-50">
               <tr>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-zinc-200">{L.thDay}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-zinc-200">{L.thCheckInTime}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-zinc-200">{L.thCheckOutTime}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-zinc-200">{L.thStatus}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-zinc-200">{L.thPhotos}</th>
+                <th className="px-4 py-3 text-xs font-semibold">{L.thDay}</th>
+                <th className="px-4 py-3 text-xs font-semibold">{L.thCheckInTime}</th>
+                <th className="px-4 py-3 text-xs font-semibold">{L.thCheckOutTime}</th>
+                <th className="px-4 py-3 text-xs font-semibold">{L.thStatus}</th>
+                <th className="px-4 py-3 text-xs font-semibold">{L.thPhotos}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="bg-white dark:bg-zinc-950">
               {history.map((row) => {
                 const st = rowStatusMeta(row);
                 return (
-                  <tr key={row.id} className="border-t border-slate-100 dark:border-zinc-800">
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-800 dark:text-zinc-200">{row.date}</td>
-                    <td className="px-4 py-3 text-slate-800 dark:text-zinc-200">
-                      {formatCompanyDateTime(row.checkedInAt, tz)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-800 dark:text-zinc-200">
-                      {formatCompanyDateTime(row.checkedOutAt, tz)}
-                    </td>
+                  <tr
+                    key={row.id}
+                    className="border-t border-slate-200 bg-white text-inherit dark:border-zinc-700 dark:bg-zinc-950 even:bg-slate-50/80 dark:even:bg-zinc-900/70"
+                  >
+                    <td className="px-4 py-3 whitespace-nowrap font-medium text-inherit">{row.date}</td>
+                    <td className="px-4 py-3 font-medium text-inherit">{formatCompanyDateTime(row.checkedInAt, tz)}</td>
+                    <td className="px-4 py-3 font-medium text-inherit">{formatCompanyDateTime(row.checkedOutAt, tz)}</td>
                     <td className="px-4 py-3">
                       <div className={`inline-flex max-w-[220px] flex-col gap-0.5 rounded-lg px-2 py-1 text-xs font-medium ${st.className}`}>
                         <span className="leading-tight">{st.primary}</span>
@@ -1161,7 +760,7 @@ export default function AttendancePanel() {
                       <div className="flex flex-col gap-1 text-xs">
                         {row.checkInPhotoUrl && (
                           <a
-                            className="text-blue-600 underline dark:text-blue-400"
+                            className="font-semibold text-sky-700 underline decoration-sky-600/40 underline-offset-2 hover:text-sky-900 dark:text-sky-300 dark:decoration-sky-400/50 dark:hover:text-sky-200"
                             href={row.checkInPhotoUrl}
                             target="_blank"
                             rel="noreferrer"
@@ -1172,7 +771,7 @@ export default function AttendancePanel() {
                         )}
                         {row.checkOutPhotoUrl && (
                           <a
-                            className="text-blue-600 underline dark:text-blue-400"
+                            className="font-semibold text-sky-700 underline decoration-sky-600/40 underline-offset-2 hover:text-sky-900 dark:text-sky-300 dark:decoration-sky-400/50 dark:hover:text-sky-200"
                             href={row.checkOutPhotoUrl}
                             target="_blank"
                             rel="noreferrer"
@@ -1181,7 +780,9 @@ export default function AttendancePanel() {
                             {L.linkCheckOutPhoto}
                           </a>
                         )}
-                        {!row.checkInPhotoUrl && !row.checkOutPhotoUrl && <span className="text-slate-400">—</span>}
+                        {!row.checkInPhotoUrl && !row.checkOutPhotoUrl && (
+                          <span className="text-slate-600 dark:text-zinc-400">—</span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1189,7 +790,7 @@ export default function AttendancePanel() {
               })}
               {history.length === 0 && !loadError && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-500 dark:text-zinc-400" colSpan={5}>
+                  <td className="px-4 py-4 font-medium text-inherit" colSpan={5}>
                     <span className="block text-sm">{L.noRecords}</span>
                   </td>
                 </tr>

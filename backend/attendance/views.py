@@ -56,6 +56,18 @@ def parse_hhmm(value: str):
     return datetime.time(h, m, 0)
 
 
+def email_already_taken(email: str, *, ignore_company_id: str | None = None, ignore_user_id: str | None = None) -> bool:
+    company_qs = Company.objects.filter(email__iexact=email)
+    if ignore_company_id:
+        company_qs = company_qs.exclude(id=ignore_company_id)
+    if company_qs.exists():
+        return True
+    user_qs = User.objects.filter(email__iexact=email)
+    if ignore_user_id:
+        user_qs = user_qs.exclude(id=ignore_user_id)
+    return user_qs.exists()
+
+
 def allowed_image_type(upload) -> bool:
     ctype = (getattr(upload, "content_type", "") or "").lower()
     if ctype in ("image/jpeg", "image/png", "image/webp", "image/jpg", "application/octet-stream"):
@@ -290,7 +302,7 @@ def super_admin_companies(request):
     tz_valid = require_valid_iana_timezone(tz_name)
     if not tz_valid:
         return JsonResponse(
-            {"error": "Timezone IANA format me hona chahiye, maslan Asia/Karachi (Gujranwala bhi isi zone me)."},
+            {"error": "Timezone must use a valid IANA name, for example Asia/Karachi."},
             status=400,
         )
     tz_name = tz_valid
@@ -300,7 +312,7 @@ def super_admin_companies(request):
     except (ValueError, TypeError):
         return JsonResponse(
             {
-                "error": "workStart aur workEnd (HH:MM) sahi format me hone chahiye.",
+                "error": "workStart and workEnd must be in HH:MM format.",
             },
             status=400,
         )
@@ -310,15 +322,20 @@ def super_admin_companies(request):
         office_lng = float(body.get("officeLongitude", 67.001100))
         location_radius_meters = int(body.get("locationRadiusMeters", 200))
     except (ValueError, TypeError):
-        return JsonResponse({"error": "Office latitude/longitude ya radius number format me hon."}, status=400)
+        return JsonResponse({"error": "Office latitude/longitude and radius must be numeric values."}, status=400)
     if "officeLatitude" in body or "officeLongitude" in body:
         if not (-90 <= office_lat <= 90 and -180 <= office_lng <= 180):
-            return JsonResponse({"error": "Office latitude/longitude range galat hai."}, status=400)
+            return JsonResponse({"error": "Office latitude/longitude values are out of valid range."}, status=400)
     if "locationRadiusMeters" in body and (location_radius_meters < 20 or location_radius_meters > 5000):
-        return JsonResponse({"error": "locationRadiusMeters 20 se 5000 ke beech hona chahiye."}, status=400)
+        return JsonResponse({"error": "locationRadiusMeters must be between 20 and 5000."}, status=400)
 
     if not company_name or not company_email or not admin_name:
         return JsonResponse({"error": "Invalid payload"}, status=400)
+    if email_already_taken(company_email):
+        return JsonResponse(
+            {"error": "This email is already in use. Company and member emails must be globally unique."},
+            status=400,
+        )
     password = generate_password()
     company = Company.objects.create(
         name=company_name,
@@ -390,15 +407,20 @@ def company_members(request):
     if isinstance(raw_pw, str) and raw_pw.strip():
         password = raw_pw.strip()
         if len(password) < 8:
-            return JsonResponse({"error": "Member password kam az kam 8 characters hona chahiye."}, status=400)
+            return JsonResponse({"error": "Member password must be at least 8 characters."}, status=400)
         if len(password) > 128:
-            return JsonResponse({"error": "Member password zyada lamba hai."}, status=400)
+            return JsonResponse({"error": "Member password is too long."}, status=400)
     else:
         password = generate_password()
 
     company = Company.objects.filter(id=company_id).first()
     if not company:
-        return JsonResponse({"error": "Company nahi mili."}, status=404)
+        return JsonResponse({"error": "Company not found."}, status=404)
+    if email_already_taken(email):
+        return JsonResponse(
+            {"error": "This email is already in use. Company and member emails must be globally unique."},
+            status=400,
+        )
 
     member = User.objects.create(
         name=name,
@@ -538,6 +560,8 @@ def company_attendance_reports(request):
     def status_for_row(row):
         if row is None:
             return "absent"
+        if row.is_check_in_fake or row.is_check_out_fake:
+            return "fake"
         if row.checked_in_at and row.checked_out_at:
             return "complete"
         if row.checked_in_at:
@@ -553,7 +577,7 @@ def company_attendance_reports(request):
     out_members = []
     for m in members:
         series = []
-        summary = {"complete": 0, "pending": 0, "absent": 0}
+        summary = {"complete": 0, "pending": 0, "absent": 0, "fake": 0}
         d2 = start_d
         while d2 <= end_d:
             row = att_map.get((m.id, d2))
@@ -729,6 +753,11 @@ def member_attendance(request):
                     "checkOutLongitude": float(row.check_out_longitude) if row.check_out_longitude is not None else None,
                     "checkInPhotoUrl": row.check_in_photo.url if row.check_in_photo else None,
                     "checkOutPhotoUrl": row.check_out_photo.url if row.check_out_photo else None,
+                    "checkInDistanceMeters": row.check_in_distance_meters,
+                    "checkOutDistanceMeters": row.check_out_distance_meters,
+                    "isCheckInFake": row.is_check_in_fake,
+                    "isCheckOutFake": row.is_check_out_fake,
+                    "isFake": row.is_check_in_fake or row.is_check_out_fake,
                 }
             )
         company_payload = {
@@ -756,11 +785,11 @@ def member_attendance(request):
         return JsonResponse(
             {
                 "error": (
-                    f"Attendance sirf shift ke darmiyan allowed hai "
+                    f"Attendance is only allowed during shift hours "
                     f"({ws} - {we}, timezone: {company.timezone}). "
-                    f"Abhi aapka local time: {local.strftime('%H:%M')}."
+                    f"Current local time: {local.strftime('%H:%M')}."
                 ),
-                "hint": "Company admin dashboard se shift start/end aur timezone (Asia/Karachi) sahi set karein.",
+                "hint": "Ask your company admin to verify shift start/end and timezone settings.",
                 "currentLocalTime": local.strftime("%H:%M"),
                 "windowStart": ws,
                 "windowEnd": we,
@@ -772,8 +801,8 @@ def member_attendance(request):
     if "multipart/form-data" not in ct:
         return JsonResponse(
             {
-                "error": "multipart/form-data bhejo: latitude, longitude, photo (live camera se).",
-                "hint": f"Abhi Content-Type: {request.content_type!r} — browser se FormData bhejein (JSON nahi).",
+                "error": "Send multipart/form-data with latitude, longitude, and live camera photo.",
+                "hint": f"Current Content-Type is {request.content_type!r}. Submit using browser FormData, not JSON.",
             },
             status=400,
         )
@@ -781,31 +810,34 @@ def member_attendance(request):
     lat_s = request.POST.get("latitude")
     lng_s = request.POST.get("longitude")
     posted_company_id = (request.POST.get("companyId") or "").strip()
+    action = (request.POST.get("action") or "").strip().lower()
+    if action and action not in ("check_in", "check_out"):
+        return JsonResponse({"error": 'Use action "check_in" or "check_out", or omit it for legacy submit.'}, status=400)
     photo = request.FILES.get("photo")
     if not lat_s or not lng_s or not photo:
-        return JsonResponse({"error": "latitude, longitude, aur live photo zaroori hain."}, status=400)
+        return JsonResponse({"error": "latitude, longitude, and a live photo are required."}, status=400)
     if posted_company_id and posted_company_id != str(company.id):
         return JsonResponse(
-            {"error": "Aap sirf apni assigned company ki attendance mark kar sakte hain."},
+            {"error": "You can only mark attendance for your assigned company."},
             status=403,
         )
     try:
         lat = float(lat_s)
         lng = float(lng_s)
     except ValueError:
-        return JsonResponse({"error": "latitude/longitude number honi chahiye."}, status=400)
+        return JsonResponse({"error": "latitude/longitude must be numeric values."}, status=400)
 
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-        return JsonResponse({"error": "Location range galat hai."}, status=400)
+        return JsonResponse({"error": "Location values are out of valid range."}, status=400)
     if not allowed_image_type(photo):
-        return JsonResponse({"error": "Photo sirf JPEG/PNG/WebP honi chahiye."}, status=400)
+        return JsonResponse({"error": "Photo must be JPEG/PNG/WebP."}, status=400)
     if photo.size > 5 * 1024 * 1024:
-        return JsonResponse({"error": "Photo 5MB se chhoti honi chahiye."}, status=400)
+        return JsonResponse({"error": "Photo must be smaller than 5MB."}, status=400)
 
-    # Live GPS coordinates save hoti hain; office radius enforce nahi — member kahin se bhi mark kar sakta hai.
     office_lat = float(company.office_latitude)
     office_lng = float(company.office_longitude)
     distance_m = haversine_meters(lat, lng, office_lat, office_lng)
+    is_fake = distance_m > float(company.location_radius_meters)
 
     today_local = company_local_date(company, now)
     existing = Attendance.objects.filter(member_id=member_id, date=today_local).first()
@@ -813,6 +845,11 @@ def member_attendance(request):
     lng_dec = Decimal(str(lng))
 
     if not existing:
+        if action == "check_out":
+            return JsonResponse(
+                {"error": "Check in first — there is no attendance record for today yet."},
+                status=400,
+            )
         row = Attendance.objects.create(
             member_id=member_id,
             date=today_local,
@@ -820,24 +857,47 @@ def member_attendance(request):
             check_in_latitude=lat_dec,
             check_in_longitude=lng_dec,
             check_in_photo=photo,
+            check_in_distance_meters=int(distance_m),
+            is_check_in_fake=is_fake,
         )
-        return JsonResponse({"message": "Checked in", "row": {"id": str(row.id)}, "distanceMeters": int(distance_m)})
+        return JsonResponse(
+            {
+                "message": "Checked in",
+                "row": {"id": str(row.id)},
+                "distanceMeters": int(distance_m),
+                "isFake": is_fake,
+            }
+        )
     if not existing.checked_out_at:
+        if action == "check_in":
+            return JsonResponse(
+                {"error": "You already checked in today. Use Check out when you leave."},
+                status=400,
+            )
         existing.checked_out_at = now
         existing.check_out_latitude = lat_dec
         existing.check_out_longitude = lng_dec
         existing.check_out_photo = photo
+        existing.check_out_distance_meters = int(distance_m)
+        existing.is_check_out_fake = is_fake
         existing.save(
             update_fields=[
                 "checked_out_at",
                 "check_out_latitude",
                 "check_out_longitude",
                 "check_out_photo",
+                "check_out_distance_meters",
+                "is_check_out_fake",
                 "updated_at",
             ]
         )
         return JsonResponse(
-            {"message": "Checked out", "row": {"id": str(existing.id)}, "distanceMeters": int(distance_m)}
+            {
+                "message": "Checked out",
+                "row": {"id": str(existing.id)},
+                "distanceMeters": int(distance_m),
+                "isFake": existing.is_check_in_fake or existing.is_check_out_fake,
+            }
         )
     return JsonResponse({"message": "Attendance already completed for today"})
 

@@ -89,6 +89,10 @@ class Attendance(models.Model):
     check_out_longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     check_in_photo = models.ImageField(upload_to="attendance/%Y/%m/", null=True, blank=True)
     check_out_photo = models.ImageField(upload_to="attendance/%Y/%m/", null=True, blank=True)
+    check_in_distance_meters = models.PositiveIntegerField(null=True, blank=True)
+    check_out_distance_meters = models.PositiveIntegerField(null=True, blank=True)
+    is_check_in_fake = models.BooleanField(default=False)
+    is_check_out_fake = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

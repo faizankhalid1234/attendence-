@@ -7,6 +7,8 @@ export const L = {
   statusPendingDetail: "Check-in only (no check-out yet)",
   statusAbsent: "Absent",
   statusAbsentDetail: "No check-in recorded",
+  statusFake: "Fake",
+  statusFakeDetail: "Outside company attendance radius",
 
   checkIn: "Check-in",
   checkOut: "Check-out",
@@ -26,19 +28,44 @@ export const L = {
   pieComplete: "Complete",
   piePending: "Pending",
   pieAbsent: "Absent",
+  pieFake: "Fake",
 
   todayPrefix: "Today",
   companyCalPhrase: "Company calendar date",
   noRecordToday: "No attendance marked for today yet.",
 
+  cameraSectionTitle: "Live camera",
+  cameraSectionHelp: "Gallery uploads are not allowed — capture from the device camera only.",
+  cameraStart: "Start camera",
+  cameraCapture: "Capture photo",
+  cameraStop: "Stop camera",
+
+  submitSectionTitle: "Submit for today",
+  submitSectionHelp:
+    "Use location + photo first. Then tap only the button that matches what you are doing: arrival = Check in, leaving = Check out.",
+  btnSubmitCheckIn: "Check in",
+  btnSubmitCheckOut: "Check out",
+  submitCardArrivalTag: "Arrival",
+  submitCardLeavingTag: "Leaving",
+  submitCardArrivalHelp: "Records your first mark of the day.",
+  submitCardLeavingHelp: "Available after check-in, before the day is closed.",
+  submitNextCheckIn: "Next: tap Check in when you arrive at work.",
+  submitNextCheckOut: "Next: tap Check out when you leave.",
+  submittingCheckIn: "Checking in…",
+  submittingCheckOut: "Checking out…",
+  hintSubmitComplete: "Today's check-in and check-out are already saved.",
+  hintSubmitCheckInBlocked: "You already checked in — use Check out when you leave.",
+  hintSubmitCheckOutNeedsIn: "Check in first; there is no record for today yet.",
+  hintSubmitCheckOutDone: "You already checked out today.",
+
   field1Tag: "Section 1 — Summary",
-  field1Title: "Last 14 days: complete, pending, absent",
+  field1Title: "Last 14 days: complete, pending, fake, absent",
   field1Help:
-    "Complete = check-in and check-out. Pending = check-in only. Absent = no mark that day (includes leave if not marked).",
+    "Complete = check-in and check-out. Pending = check-in only. Fake = outside company radius. Absent = no mark that day.",
 
   field2Tag: "Section 2 — Daily breakdown",
   field2Title: "One column per day",
-  field2Help: "Green = complete, amber = pending, grey = absent. Your record only.",
+  field2Help: "Green = complete, amber = pending, red = fake, grey = absent. Your record only.",
 
   coTeamHeader: "Team reports",
   coTeamTitle: "Your company only",
@@ -65,8 +92,9 @@ export const L = {
   coNoMembers: "No members yet — add a member first.",
 } as const;
 
-export const chartTooltip: Record<"complete" | "pending" | "absent", string> = {
+export const chartTooltip: Record<"complete" | "pending" | "absent" | "fake", string> = {
   complete: "Complete (checked in & out)",
   pending: "Pending (check-in only)",
   absent: "Absent (no mark)",
+  fake: "Fake (outside company radius)",
 };

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* Class on <html> from ThemeProvider — descendant utilities must match `.dark …` */
+@custom-variant dark (.dark &);
 
 :root {
   --background: #f8fafc;

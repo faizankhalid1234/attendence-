@@ -1,4 +1,4 @@
-/** IANA timezones — Gujranwala / Lahore / Karachi sab `Asia/Karachi` me aate hain */
+/** Common IANA zones — Pakistan cities (e.g. Karachi, Lahore, Gujranwala) use `Asia/Karachi`. */
 export const COMMON_TIMEZONES = [
   { value: "Asia/Karachi", label: "Pakistan (Karachi / Lahore / Gujranwala)" },
   { value: "Asia/Dubai", label: "UAE (Dubai)" },

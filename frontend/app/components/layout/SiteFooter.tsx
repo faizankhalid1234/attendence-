@@ -79,9 +79,9 @@ export default function SiteFooter() {
           </summary>
           <ol className="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm leading-relaxed text-slate-600 dark:border-zinc-800 dark:text-zinc-300">
             <li>
-              <strong className="text-slate-800 dark:text-zinc-100">1. Setup</strong> — Companies aur company-admin
-              accounts Django Admin (backend) se banaye jate hain; is web app par sirf company admin aur member login
-              hota hai.
+              <strong className="text-slate-800 dark:text-zinc-100">1. Setup</strong> — Companies and company-admin
+              accounts are created in Django Admin (backend). This web app is used for company admin and member sign-in
+              only.
             </li>
             <li>
               <strong className="text-slate-800 dark:text-zinc-100">2. Company Admin</strong> — Logs in with the
@@ -96,7 +96,7 @@ export default function SiteFooter() {
             <li>
               <strong className="text-slate-800 dark:text-zinc-100">4. Status</strong> — &quot;Complete&quot; means
               both check-in and check-out that day; &quot;Pending&quot; means check-in only; &quot;Absent&quot; means no
-              attendance was recorded for that day.
+              attendance was recorded; &quot;Fake&quot; means the mark was outside the company radius.
             </li>
           </ol>
         </details>

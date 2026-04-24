@@ -1,14 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 type Props = { className?: string };
 
 export default function LogoutButton({ className = "" }: Props) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   const onLogout = async () => {
+    if (loading) return;
+    setLoading(true);
     await apiFetch("/api/auth/logout", { method: "POST" });
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("memberCompanyName");
@@ -28,9 +32,10 @@ export default function LogoutButton({ className = "" }: Props) {
     <button
       type="button"
       onClick={onLogout}
+      disabled={loading}
       className={`rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 ${className}`}
     >
-      Logout
+      {loading ? "Logging out..." : "Logout"}
     </button>
   );
 }

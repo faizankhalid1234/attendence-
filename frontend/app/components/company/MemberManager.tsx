@@ -11,6 +11,7 @@ export default function MemberManager() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
     const res = await apiFetch("/api/company/members");
@@ -25,6 +26,8 @@ export default function MemberManager() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     setMessage("");
     const body: { name: string; email: string; password?: string } = { name, email: email.trim().toLowerCase() };
     if (password.trim().length >= 8) body.password = password.trim();
@@ -37,11 +40,12 @@ export default function MemberManager() {
     const data = await res.json();
     if (!res.ok) {
       setMessage(data.error || "Could not add member");
+      setSubmitting(false);
       return;
     }
 
     let msg = password.trim().length >= 8
-      ? "Member added — password aap ne set kiya; welcome email bheji gayi (agar SMTP on ho)."
+      ? "Member added. The password you set has been saved and a welcome email was sent (if SMTP is configured)."
       : `Member added. Temporary password: ${data.member.tempPassword}`;
     if (data.emailWarning) msg += ` | ${data.emailWarning}`;
     setMessage(msg);
@@ -49,6 +53,7 @@ export default function MemberManager() {
     setEmail("");
     setPassword("");
     await load();
+    setSubmitting(false);
   };
 
   return (
@@ -59,8 +64,7 @@ export default function MemberManager() {
       >
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Add Member</h3>
         <p className="text-xs text-slate-600 dark:text-zinc-400">
-          Unique email recommend. Password khali chhoro to system random banayega; warna kam az kam 8 characters (member
-          ko email mein bhej diya jayega).
+          Email must be globally unique. Leave password empty for auto-generated credentials, or set at least 8 characters.
         </p>
         <input
           className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
@@ -86,8 +90,11 @@ export default function MemberManager() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <button className="rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow hover:bg-emerald-500">
-          Add Member
+        <button
+          disabled={submitting}
+          className="rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow hover:bg-emerald-500 disabled:opacity-60"
+        >
+          {submitting ? "Adding member..." : "Add Member"}
         </button>
         {message && (
           <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-zinc-800 dark:text-zinc-200">
