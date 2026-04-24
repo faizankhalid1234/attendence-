@@ -15,6 +15,18 @@ logger = logging.getLogger(__name__)
 def _smtp_ready() -> bool:
     return bool(settings.EMAIL_HOST and settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD)
 
+
+def smtp_config_gaps() -> list[str]:
+    """Kaun se SMTP env khali hain — user-facing hint ke liye (values expose nahi)."""
+    gaps: list[str] = []
+    if not (settings.EMAIL_HOST or "").strip():
+        gaps.append("EMAIL_HOST (ya SMTP_HOST)")
+    if not (settings.EMAIL_HOST_USER or "").strip():
+        gaps.append("BREVO_SMTP_LOGIN (ya EMAIL_HOST_USER / SMTP_USER)")
+    if not (settings.EMAIL_HOST_PASSWORD or "").strip():
+        gaps.append("BREVO_SMTP_KEY (ya EMAIL_HOST_PASSWORD / SMTP_PASS)")
+    return gaps
+
 COOKIE_NAME = "attendance_session"
 
 
@@ -86,9 +98,15 @@ def send_credentials_email(
     Returns {"sent": bool, "mocked": bool, "error": optional str}
     """
     if not _smtp_ready():
-        logger.warning("[EMAIL MOCK] %s credentials to=%s (EMAIL_* / Brevo env khali)", role, to)
+        missing = smtp_config_gaps()
+        logger.warning(
+            "[EMAIL MOCK] %s credentials to=%s — missing: %s",
+            role,
+            to,
+            ", ".join(missing) if missing else "(unknown)",
+        )
         print(f"[EMAIL MOCK] {role} credentials", {"to": to, "name": name, "password": password})
-        return {"sent": False, "mocked": True}
+        return {"sent": False, "mocked": True, "missing": missing}
 
     role_key = (role or "").strip()
     cn = (company_name or "").strip()

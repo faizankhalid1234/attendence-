@@ -15,8 +15,7 @@ export default function MemberDashboard() {
   }, []);
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] bg-gradient-to-b from-slate-950 via-indigo-950/40 to-slate-950 px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-3xl space-y-10">
+    <div className="mx-auto max-w-3xl space-y-10">
         <PageHeader
           eyebrow="Member portal"
           title="Attendance workspace"
@@ -76,6 +75,5 @@ export default function MemberDashboard() {
           </div>
         </div>
       </div>
-    </div>
   );
 }

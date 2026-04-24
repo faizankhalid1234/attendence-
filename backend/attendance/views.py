@@ -345,7 +345,12 @@ def super_admin_companies(request):
         "company": {"id": str(company.id), "name": company.name, "email": company.email, "tempPassword": password},
     }
     if mail_result.get("mocked"):
-        payload["emailWarning"] = "SMTP set nahi — password sirf is response / server console me dekho."
+        miss = mail_result.get("missing") or []
+        payload["emailWarning"] = (
+            "Real email nahi gayi — "
+            + ("; ".join(miss) if miss else "SMTP/Brevo env")
+            + " backend/.env ya server Variables mein set karo; password abhi response/console par hai."
+        )
     elif not mail_result.get("sent"):
         payload["emailWarning"] = f"Email send fail: {mail_result.get('error', 'unknown')}"
     return JsonResponse(payload)
@@ -416,7 +421,12 @@ def company_members(request):
         },
     }
     if mail_result.get("mocked"):
-        payload["emailWarning"] = "SMTP set nahi — password API response me hi hai."
+        miss = mail_result.get("missing") or []
+        payload["emailWarning"] = (
+            "Real email nahi gayi — "
+            + ("; ".join(miss) if miss else "SMTP/Brevo env")
+            + " set karo; password API response me hai."
+        )
     elif not mail_result.get("sent"):
         payload["emailWarning"] = f"Email send fail: {mail_result.get('error', 'unknown')}"
     return JsonResponse(payload)

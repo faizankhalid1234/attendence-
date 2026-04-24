@@ -1,9 +1,12 @@
 import os
+import re
 from urllib.parse import urlparse
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load backend/.env — cwd par depend na ho (warna SMTP vars miss ho kar "SMTP off" dikhta hai).
+_BASE = Path(__file__).resolve().parent.parent
+load_dotenv(_BASE / ".env")
 
 
 def _env_first(*names: str, default: str = "") -> str:
@@ -15,7 +18,7 @@ def _env_first(*names: str, default: str = "") -> str:
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = _BASE
 
 
 # Quick-start development settings - unsuitable for production
@@ -148,8 +151,33 @@ EMAIL_PORT = int(_env_first("EMAIL_PORT", "SMTP_PORT") or "587")
 EMAIL_HOST_USER = _env_first("EMAIL_HOST_USER", "SMTP_USER", "BREVO_SMTP_LOGIN")
 EMAIL_HOST_PASSWORD = _env_first("EMAIL_HOST_PASSWORD", "SMTP_PASS", "BREVO_SMTP_KEY")
 EMAIL_USE_TLS = _env_first("EMAIL_USE_TLS", default="true").lower() in ("1", "true", "yes", "on")
-DEFAULT_FROM_EMAIL = _env_first("DEFAULT_FROM_EMAIL", "BREVO_SENDER_EMAIL", "SMTP_FROM", default="noreply@localhost")
-EMAIL_BRAND_NAME = _env_first("EMAIL_BRAND_NAME", "BANK_NAME_EMAIL", default="Attendance Mark")
+
+# Inbox "From" display name + HTML templates (do not use BANK_NAME_EMAIL — that was a misleading alias)
+EMAIL_BRAND_NAME = _env_first("EMAIL_BRAND_NAME", default="Attendance Mark")
+EMAIL_FROM_NAME = _env_first("EMAIL_FROM_NAME", default=EMAIL_BRAND_NAME)
+
+
+def _parse_angle_bracket_email(raw: str) -> str | None:
+    """'Any Name <addr@domain>' se sirf email nikalta hai."""
+    m = re.search(r"<\s*([^>\s]+@[^>\s]+)\s*>", raw)
+    return m.group(1).strip() if m else None
+
+
+def _default_from_email() -> str:
+    raw = _env_first("DEFAULT_FROM_EMAIL", "BREVO_SENDER_EMAIL", "SMTP_FROM")
+    display = (EMAIL_FROM_NAME or EMAIL_BRAND_NAME or "Attendance Mark").strip().replace('"', "")
+    if not raw:
+        return "noreply@localhost"
+    inner = _parse_angle_bracket_email(raw)
+    if inner:
+        # Purani "Ally Bank <...>" jaisi strings ignore — From naam hamesha EMAIL_BRAND_NAME se
+        return f"{display} <{inner}>" if display else inner
+    if "@" in raw:
+        return f"{display} <{raw}>" if display else raw
+    return raw
+
+
+DEFAULT_FROM_EMAIL = _default_from_email()
 FRONTEND_LOGIN_URL = _env_first("FRONTEND_LOGIN_URL", default="http://localhost:3000").rstrip("/")
 
 # Default primary key field type

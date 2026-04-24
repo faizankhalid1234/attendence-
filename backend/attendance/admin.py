@@ -87,10 +87,16 @@ class CompanyAdmin(admin.ModelAdmin):
                 obj.email, display_name, company_password, "Company", company_name=obj.name
             )
             if mail_result.get("mocked"):
+                miss = mail_result.get("missing") or []
+                hint = (
+                    " Real email nahi gayi — server par ye set karo: " + "; ".join(miss)
+                    if miss
+                    else " backend/.env ya hosting env mein Brevo/SMTP vars."
+                )
                 self.message_user(
                     request,
-                    "SMTP off — login ke liye wahi password jo form mein diya.",
-                    level=messages.SUCCESS,
+                    "SMTP off — login ke liye wahi password jo form mein diya." + hint,
+                    level=messages.WARNING,
                 )
             elif not mail_result.get("sent"):
                 self.message_user(
@@ -113,10 +119,16 @@ class CompanyAdmin(admin.ModelAdmin):
             obj.email, display_name, company_password, "Company", company_name=obj.name
         )
         if mail_result.get("mocked"):
+            miss = mail_result.get("missing") or []
+            hint = (
+                " Real inbox par mail tabhi jayegi jab " + "; ".join(miss) + " backend/.env (ya Railway) mein bharoge."
+                if miss
+                else " backend/.env ya hosting par EMAIL_HOST + BREVO_SMTP_LOGIN + BREVO_SMTP_KEY set karo."
+            )
             self.message_user(
                 request,
-                f"Company login ready: {obj.email}. SMTP off — wahi password jo form mein diya.",
-                level=messages.SUCCESS,
+                f"Company login ready: {obj.email}. SMTP off — wahi password jo form mein diya.{hint}",
+                level=messages.WARNING,
             )
         elif not mail_result.get("sent"):
             self.message_user(
@@ -196,18 +208,33 @@ class UserAdmin(admin.ModelAdmin):
 
         if should_send and obj.role in [Role.COMPANY_ADMIN, Role.MEMBER]:
             cn = obj.company.name if obj.company else None
-            send_credentials_email(
+            mail_result = send_credentials_email(
                 obj.email,
                 obj.name,
                 raw_password,
                 "Member" if obj.role == Role.MEMBER else "Company",
                 company_name=cn,
             )
-            self.message_user(
-                request,
-                f"{obj.role} credentials {obj.email} par send ho gaye.",
-                level=messages.SUCCESS,
-            )
+            if mail_result.get("mocked"):
+                miss = mail_result.get("missing") or []
+                hint = " Real email nahi — set karo: " + "; ".join(miss) if miss else " backend/.env ya hosting SMTP vars."
+                self.message_user(
+                    request,
+                    f"{obj.role}: password save ho gaya; SMTP off — inbox par mail nahi gayi.{hint}",
+                    level=messages.WARNING,
+                )
+            elif not mail_result.get("sent"):
+                self.message_user(
+                    request,
+                    f"Email fail: {mail_result.get('error', 'unknown')}",
+                    level=messages.WARNING,
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"{obj.role} credentials {obj.email} par bhej diye.",
+                    level=messages.SUCCESS,
+                )
 
 
 @admin.register(Attendance)

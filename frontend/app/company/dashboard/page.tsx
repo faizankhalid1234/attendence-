@@ -16,8 +16,7 @@ export default function CompanyDashboard() {
   }, []);
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] bg-gradient-to-b from-zinc-950 via-emerald-950/30 to-zinc-950 px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-6xl space-y-10">
+    <div className="mx-auto max-w-6xl space-y-10">
         <PageHeader
           eyebrow="Company admin portal"
           title={companyName || "Your company"}
@@ -90,6 +89,5 @@ export default function CompanyDashboard() {
           </div>
         </div>
       </div>
-    </div>
   );
 }
