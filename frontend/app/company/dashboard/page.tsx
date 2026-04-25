@@ -1,82 +1,44 @@
 "use client";
 
-import { useMemo } from "react";
+import { startTransition, useEffect, useState } from "react";
 import MemberManager from "@/app/components/company/MemberManager";
 import CompanyTeamAttendance from "@/app/components/company/CompanyTeamAttendance";
 import PageHeader from "@/app/components/layout/PageHeader";
 
 export default function CompanyDashboard() {
-  const companyName = useMemo(
-    () => (typeof window === "undefined" ? null : sessionStorage.getItem("portalCompanyName")),
-    [],
-  );
-  const userName = useMemo(
-    () => (typeof window === "undefined" ? null : sessionStorage.getItem("portalUserName")),
-    [],
-  );
+  const [companyName, setCompanyName] = useState<string | null>(null);
+
+  useEffect(() => {
+    startTransition(() => {
+      setCompanyName(sessionStorage.getItem("portalCompanyName"));
+    });
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl space-y-10">
-        <PageHeader
-          eyebrow="Company admin portal"
-          title={companyName || "Your company"}
-          subtitle={
-            companyName
-              ? `${userName ? `${userName} · ` : ""}Review attendance and manage who you have hired. Only members can mark check-in/out from their account — you cannot submit attendance for them. Shift and office location are set in Django Admin.`
-              : "After login, your company name and tools appear here."
-          }
-          showLogout
-          logoutClassName="rounded-md border border-gray-400 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100"
-        />
+      <PageHeader
+        variant="company"
+        eyebrow="Company admin portal"
+        title={companyName || "Your company"}
+        showLogout
+      />
 
-        <section
-          aria-label="Account type"
-          className="relative overflow-hidden rounded-3xl border border-emerald-400/30 bg-gradient-to-r from-emerald-600/90 via-teal-600/85 to-cyan-700/90 p-6 text-white shadow-2xl shadow-emerald-900/40 sm:p-8"
-        >
-          <div className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl shadow-inner ring-2 ring-white/30">
-                🏢
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/90">Your role</p>
-                <h2 className="mt-1 text-2xl font-bold tracking-tight">Company administrator</h2>
-                <p className="mt-2 max-w-xl text-sm leading-relaxed text-emerald-50/95">
-                  This area only shows your company data: add members, review attendance, and check reports.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <span className="rounded-full bg-white/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide ring-1 ring-white/25">
-                Reports & charts
-              </span>
-              <span className="rounded-full bg-white/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide ring-1 ring-white/25">
-                Team members
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <div className="px-1">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">Attendance & team</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-zinc-400">
-              Click any team member card to open their own page with a full day-by-day table for the range you select.
-            </p>
-          </div>
+      {/* One merged card: hero + team roster + add members */}
+      <section aria-label="Company workspace">
+        <div className="overflow-hidden rounded-[2rem] border border-emerald-200/45 bg-white shadow-2xl shadow-emerald-900/15 ring-1 ring-slate-900/5 dark:border-emerald-900/40 dark:bg-zinc-950 dark:shadow-emerald-950/20">
           <CompanyTeamAttendance />
-        </section>
 
-        <section className="space-y-3">
-          <div className="px-1">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">Add members</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-zinc-400">
-              New hires appear in the list below and in attendance reports after their account is created.
+          <div className="border-t border-slate-200/80 bg-gradient-to-b from-white via-emerald-50/25 to-slate-50/90 px-6 py-8 sm:px-10 sm:py-10 dark:border-zinc-800 dark:from-zinc-950 dark:via-emerald-950/10 dark:to-zinc-900">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Add members</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
+              New hires appear in the roster above and can sign in to mark attendance. Email must be unique across the whole app.
             </p>
+            <div className="mt-6">
+              <MemberManager embedded />
+            </div>
           </div>
-          <MemberManager />
-        </section>
-      </div>
+        </div>
+      </section>
+    </div>
   );
 }

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, readJsonSafe } from "@/lib/api";
+import SummaryPie from "@/app/components/charts/SummaryPie";
 import type { DayStatus } from "@/lib/attendanceSeries";
 import { L } from "@/lib/attendanceLabels";
 
@@ -59,6 +60,13 @@ export default function CompanyMemberAttendancePage() {
   const [timezone, setTimezone] = useState("");
   const [range, setRange] = useState<{ start: string; end: string } | null>(null);
   const [error, setError] = useState("");
+  const [companyName, setCompanyName] = useState<string | null>(null);
+
+  useEffect(() => {
+    startTransition(() => {
+      setCompanyName(sessionStorage.getItem("portalCompanyName"));
+    });
+  }, []);
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -91,8 +99,16 @@ export default function CompanyMemberAttendancePage() {
 
   const presentDays = member ? member.summary.complete + member.summary.pending : 0;
 
-  const companyName =
-    typeof window !== "undefined" ? sessionStorage.getItem("portalCompanyName") : null;
+  const memberPie = useMemo(() => {
+    if (!member) return [];
+    const s = member.summary;
+    return [
+      { name: L.pieComplete, value: s.complete, color: "#22c55e" },
+      { name: L.piePending, value: s.pending, color: "#f59e0b" },
+      { name: L.pieFake, value: s.fake || 0, color: "#ef4444" },
+      { name: L.pieAbsent, value: s.absent, color: "#94a3b8" },
+    ];
+  }, [member]);
 
   const title = useMemo(() => {
     if (member) return member.name;
@@ -173,6 +189,15 @@ export default function CompanyMemberAttendancePage() {
               {L.coStatPresent}
               <span className="mt-0.5 block font-normal text-emerald-800/80 dark:text-emerald-200/80">{L.coStatPresentSub}</span>
             </span>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/90 to-white p-5 shadow-inner dark:border-zinc-700 dark:from-zinc-900/80 dark:to-zinc-950">
+            <p className="text-center text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-zinc-400">
+              {L.coMemberPieTitle}
+            </p>
+            <div className="mx-auto mt-2 max-w-[260px]">
+              <SummaryPie data={memberPie} />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

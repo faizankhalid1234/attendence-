@@ -97,9 +97,6 @@ export const L = {
   coTeamHeader: "Team reports",
   coTeamTitle: "Your company only",
   coTeamHelp: "Team totals, the member table, and the selected member’s daily chart are grouped in one panel.",
-  coTeamRosterIntro:
-    "Counts below are for the date range you pick. Open any team member to see their full day-by-day record on its own page.",
-  coMembersClickOpen: "Click a card to open that member’s attendance table (no graphs — just their days and status).",
   coOpenMemberPage: "View full record →",
 
   coF1: "Section 1 — Team summary",
@@ -122,8 +119,6 @@ export const L = {
   coRefresh: "Refresh",
   coNoMembers: "No members yet — add a member first.",
 
-  coViewOnlyBanner:
-    "View only: members mark their own attendance from the member app. You cannot check in or check out on behalf of anyone.",
   coMembersRosterTitle: "Your team",
   coMembersRosterHelp: "People you have added to this company. Tap one to see their counts and day-by-day table.",
   coPickMemberTitle: "Member overview",
@@ -147,6 +142,7 @@ export const L = {
   coBackToTeam: "← Back to team",
   coMemberReportTitle: "Attendance record",
   coMemberReportSubtitle: "Day-by-day for the range below. Members mark their own attendance.",
+  coMemberPieTitle: "This member — complete, pending, fake, absent",
 } as const;
 
 export const chartTooltip: Record<"complete" | "pending" | "absent" | "fake", string> = {

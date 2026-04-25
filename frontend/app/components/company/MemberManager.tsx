@@ -5,7 +5,9 @@ import { apiFetch } from "@/lib/api";
 
 type Member = { id: string; name: string; email: string; createdAt: string };
 
-export default function MemberManager() {
+type Props = { embedded?: boolean };
+
+export default function MemberManager({ embedded = false }: Props) {
   const [members, setMembers] = useState<Member[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,12 +58,17 @@ export default function MemberManager() {
     setSubmitting(false);
   };
 
+  const shell = embedded ? "space-y-5" : "space-y-6";
+  const formShell = embedded
+    ? "grid gap-4 rounded-2xl border border-emerald-200/40 bg-white/95 p-5 dark:border-emerald-900/35 dark:bg-zinc-900/50"
+    : "grid gap-4 rounded-3xl border border-emerald-200/50 bg-gradient-to-b from-white to-emerald-50/30 p-6 shadow-lg shadow-emerald-900/5 ring-1 ring-slate-900/5 dark:border-emerald-900/30 dark:from-zinc-950 dark:to-emerald-950/20 dark:shadow-none";
+  const tableShell = embedded
+    ? "overflow-hidden rounded-2xl border border-slate-200/80 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+    : "overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-md ring-1 ring-slate-900/5 dark:border-zinc-800 dark:bg-zinc-950";
+
   return (
-    <div className="space-y-6">
-      <form
-        onSubmit={onSubmit}
-        className="grid gap-4 rounded-3xl border border-emerald-200/50 bg-gradient-to-b from-white to-emerald-50/30 p-6 shadow-lg shadow-emerald-900/5 ring-1 ring-slate-900/5 dark:border-emerald-900/30 dark:from-zinc-950 dark:to-emerald-950/20 dark:shadow-none"
-      >
+    <div className={shell}>
+      <form onSubmit={onSubmit} className={formShell}>
         <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add member</h3>
         <p className="text-xs text-slate-600 dark:text-zinc-400">
           Email must be globally unique. Leave password empty for auto-generated credentials, or set at least 8 characters.
@@ -103,7 +110,7 @@ export default function MemberManager() {
         )}
       </form>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-md ring-1 ring-slate-900/5 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className={tableShell}>
         <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-emerald-50/40 px-5 py-3 dark:border-zinc-800 dark:from-zinc-900 dark:to-emerald-950/20">
           <p className="text-sm font-bold text-slate-900 dark:text-white">Member accounts</p>
           <p className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">Everyone listed here can sign in as a member and mark their own attendance.</p>

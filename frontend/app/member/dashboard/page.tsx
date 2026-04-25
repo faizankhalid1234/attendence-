@@ -1,18 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { startTransition, useEffect, useState } from "react";
 import AttendancePanel from "@/app/components/member/AttendancePanel";
 import PageHeader from "@/app/components/layout/PageHeader";
 
 export default function MemberDashboard() {
-  const headerCompany = useMemo(
-    () => (typeof window === "undefined" ? null : sessionStorage.getItem("memberCompanyName")),
-    [],
-  );
-  const headerName = useMemo(
-    () => (typeof window === "undefined" ? null : sessionStorage.getItem("memberUserName")),
-    [],
-  );
+  const [headerCompany, setHeaderCompany] = useState<string | null>(null);
+  const [headerName, setHeaderName] = useState<string | null>(null);
+
+  useEffect(() => {
+    startTransition(() => {
+      setHeaderCompany(sessionStorage.getItem("memberCompanyName"));
+      setHeaderName(sessionStorage.getItem("memberUserName"));
+    });
+  }, []);
 
   return (
     <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4">
