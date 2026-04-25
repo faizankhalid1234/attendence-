@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Class on <html> from ThemeProvider — descendant utilities must match `.dark …` */
+/* Optional `.dark` variant for legacy utilities; app stays in light mode. */
 @custom-variant dark (.dark &);
 
 :root {

@@ -1,30 +1,30 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, readJsonSafe } from "@/lib/api";
-import StatusBarChart from "@/app/components/charts/StatusBarChart";
 import SummaryPie from "@/app/components/charts/SummaryPie";
-import type { DayStatus } from "@/lib/attendanceSeries";
 import { L } from "@/lib/attendanceLabels";
 
-type SeriesPoint = { date: string; status: DayStatus };
 type ReportMember = {
   id: string;
   name: string;
   email: string;
-  series: SeriesPoint[];
   summary: { complete: number; pending: number; absent: number; fake?: number };
 };
 
-const card =
-  "rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-md backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90 sm:p-6";
+function initials(name: string): string {
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return "?";
+  if (p.length === 1) return p[0]!.slice(0, 2).toUpperCase();
+  return (p[0]![0] + p[p.length - 1]![0]).toUpperCase();
+}
 
 export default function CompanyTeamAttendance() {
   const [days, setDays] = useState(21);
   const [members, setMembers] = useState<ReportMember[]>([]);
   const [timezone, setTimezone] = useState("");
   const [range, setRange] = useState<{ start: string; end: string } | null>(null);
-  const [selectedId, setSelectedId] = useState<string>("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -47,31 +47,12 @@ export default function CompanyTeamAttendance() {
     setMembers(list);
     setTimezone(data.timezone || "");
     setRange({ start: data.startDate || "", end: data.endDate || "" });
-    setSelectedId((id) => {
-      if (id && list.some((m) => m.id === id)) return id;
-      return list[0]?.id || "";
-    });
   }, [days]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  const selected = useMemo(
-    () => members.find((m) => m.id === selectedId) || members[0],
-    [members, selectedId],
-  );
-
-  const barData = useMemo(() => {
-    if (!selected?.series) return [];
-    return selected.series.map((p) => ({
-      day: p.date.slice(5),
-      full: p.date,
-      status: p.status,
-      statusValue: p.status === "complete" ? 4 : p.status === "pending" ? 3 : p.status === "fake" ? 2 : 1,
-    }));
-  }, [selected]);
 
   const teamPie = useMemo(() => {
     const t = members.reduce(
@@ -92,34 +73,33 @@ export default function CompanyTeamAttendance() {
   }, [members]);
 
   return (
-    <div className="space-y-6">
-      <section className={card}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="overflow-hidden rounded-3xl border border-emerald-200/40 bg-white text-slate-900 shadow-xl shadow-emerald-900/10 ring-1 ring-slate-900/5 dark:border-emerald-900/30 dark:bg-zinc-950 dark:text-zinc-50">
+      <div className="relative border-b border-emerald-100/80 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-5 py-6 text-white sm:px-7 sm:py-7">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
-              {L.coTeamHeader}
-            </p>
-            <h2 className="mt-2 text-xl font-bold text-slate-900 dark:text-white">{L.coTeamTitle}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-zinc-400">{L.coTeamHelp}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-100/90">{L.coTeamHeader}</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{L.coTeamTitle}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-emerald-50/95">{L.coTeamRosterIntro}</p>
             {range && (
-              <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-                Range: {range.start} → {range.end}
+              <p className="mt-3 rounded-lg bg-black/15 px-3 py-1.5 text-xs font-medium text-emerald-50 backdrop-blur-sm">
+                {range.start} → {range.end}
                 {timezone ? ` · ${timezone}` : ""}
               </p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label htmlFor="company-report-days" className="text-xs font-medium text-slate-600 dark:text-zinc-400">
+            <label htmlFor="company-report-days" className="text-xs font-semibold text-emerald-100">
               {L.coDuration}
             </label>
             <select
               id="company-report-days"
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+              className="rounded-xl border border-white/25 bg-white/15 px-3 py-2.5 text-sm font-medium text-white shadow-inner backdrop-blur outline-none ring-offset-2 ring-offset-emerald-700 focus:ring-2 focus:ring-white/60"
             >
               {[7, 14, 21, 30, 60, 90].map((d) => (
-                <option key={d} value={d}>
+                <option key={d} value={d} className="text-slate-900">
                   {d} days
                 </option>
               ))}
@@ -127,87 +107,93 @@ export default function CompanyTeamAttendance() {
             <button
               type="button"
               onClick={() => void load()}
-              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+              className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-emerald-800 shadow-md transition hover:bg-emerald-50"
               title={L.coRefresh}
             >
               {L.coRefresh}
             </button>
           </div>
         </div>
-
         {error && (
-          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <p className="relative mt-4 rounded-xl border border-red-300/40 bg-red-950/30 px-4 py-3 text-sm text-red-50">
             {error}
           </p>
         )}
+      </div>
 
-        {!members.length && !error && <p className="mt-6 text-sm text-slate-500 dark:text-zinc-500">{L.coNoMembers}</p>}
-      </section>
+      <div className="border-b border-amber-200/60 bg-gradient-to-r from-amber-50 to-orange-50/80 px-5 py-3.5 dark:border-amber-900/40 dark:from-amber-950/50 dark:to-orange-950/30">
+        <p className="text-center text-sm font-medium leading-relaxed text-amber-950/90 dark:text-amber-100/90">
+          {L.coViewOnlyBanner}
+        </p>
+      </div>
+
+      {!members.length && !error && (
+        <p className="px-6 py-14 text-center text-sm text-slate-500 dark:text-zinc-400">{L.coNoMembers}</p>
+      )}
 
       {!!members.length && (
-        <>
-          <section className={card}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-800 dark:text-indigo-300">{L.coF1}</p>
-            <h3 className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{L.coF1Title}</h3>
-            <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-zinc-400">{L.coF1Desc}</p>
-            <div className="mt-6 max-w-md">
+        <div className="p-5 sm:p-7">
+          <div className="mx-auto mb-8 max-w-[240px]">
+            <p className="text-center text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+              {L.coTeamMixTitle}
+            </p>
+            <div className="mt-3">
               <SummaryPie data={teamPie} />
             </div>
-          </section>
+          </div>
 
-          <section className={card}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">{L.coF2}</p>
-            <h3 className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{L.coF2Title}</h3>
-            <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-zinc-400">{L.coF2Desc}</p>
-            <label htmlFor="company-member-report" className="mt-4 block text-xs font-semibold text-slate-600 dark:text-zinc-400">
-              {L.coMemberLabel}
-            </label>
-            <select
-              id="company-member-report"
-              value={selected?.id || ""}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-            >
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} — {m.email}
-                </option>
-              ))}
-            </select>
-          </section>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">{L.coMembersRosterTitle}</h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">{L.coMembersClickOpen}</p>
 
-          {selected && (
-            <>
-              <section className={card}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-teal-900 dark:text-teal-300">{L.coF3}</p>
-                <h3 className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{selected.name}</h3>
-                <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">{selected.email}</p>
-                <p className="mt-3 text-xs font-medium text-slate-600 dark:text-zinc-400">{L.coF3Title}</p>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full bg-emerald-500/15 px-3 py-1 font-semibold text-emerald-800 dark:text-emerald-300">
-                    {L.statusComplete}: {selected.summary.complete}
-                  </span>
-                  <span className="rounded-full bg-amber-500/15 px-3 py-1 font-semibold text-amber-900 dark:text-amber-200">
-                    {L.statusPending}: {selected.summary.pending}
-                  </span>
-                  <span className="rounded-full bg-red-500/15 px-3 py-1 font-semibold text-red-900 dark:text-red-200">
-                    {L.statusFake}: {selected.summary.fake || 0}
-                  </span>
-                  <span className="rounded-full bg-slate-500/15 px-3 py-1 font-semibold text-slate-700 dark:text-zinc-300">
-                    {L.statusAbsent}: {selected.summary.absent}
-                  </span>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {members.map((m) => (
+              <Link
+                key={m.id}
+                href={`/company/dashboard/members/${m.id}`}
+                className="group rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-4 shadow-sm transition hover:border-emerald-400 hover:shadow-md dark:border-zinc-700 dark:from-zinc-900 dark:to-zinc-950 dark:hover:border-emerald-600"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-bold text-white shadow-inner">
+                    {initials(m.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-slate-900 group-hover:text-emerald-800 dark:text-zinc-100 dark:group-hover:text-emerald-300">
+                      {m.name}
+                    </p>
+                    <p className="truncate text-[11px] text-slate-500 dark:text-zinc-500">{m.email}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span
+                        title={L.statusComplete}
+                        className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200"
+                      >
+                        {m.summary.complete} full
+                      </span>
+                      <span
+                        title={L.statusPending}
+                        className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-950 dark:bg-amber-950/50 dark:text-amber-200"
+                      >
+                        {m.summary.pending} open
+                      </span>
+                      <span
+                        title={L.statusFake}
+                        className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-900 dark:bg-red-950/50 dark:text-red-200"
+                      >
+                        {m.summary.fake || 0} fake
+                      </span>
+                      <span
+                        title={L.statusAbsent}
+                        className="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-zinc-700 dark:text-zinc-200"
+                      >
+                        {m.summary.absent} no mark
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400">{L.coOpenMemberPage}</p>
+                  </div>
                 </div>
-              </section>
-
-              <section className={card}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-900 dark:text-violet-300">{L.coF4}</p>
-                <h3 className="mt-2 text-lg font-bold text-slate-900 dark:text-white">{L.coF4Title}</h3>
-                <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-zinc-400">{L.coF4Desc}</p>
-                <div className="mt-6">{barData.length > 0 && <StatusBarChart data={barData} />}</div>
-              </section>
-            </>
-          )}
-        </>
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

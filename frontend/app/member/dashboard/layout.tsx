@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import DashboardShell from "@/app/components/layout/DashboardShell";
 
 export const metadata: Metadata = {
   title: "Member dashboard",
@@ -7,5 +6,5 @@ export const metadata: Metadata = {
 };
 
 export default function MemberDashboardLayout({ children }: { children: React.ReactNode }) {
-  return <DashboardShell variant="member">{children}</DashboardShell>;
+  return <div className="min-h-[calc(100vh-5rem)] bg-gray-50 text-gray-900">{children}</div>;
 }

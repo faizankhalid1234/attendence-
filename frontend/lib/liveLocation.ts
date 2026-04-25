@@ -1,6 +1,6 @@
 /**
- * Simple browser geolocation + Haversine distance (merged from Live-Location demo).
- * Uses navigator.geolocation.getCurrentPosition only — no reverse geocoding.
+ * Browser geolocation for attendance — tied to a user gesture (button tap).
+ * Tries high accuracy first, then a faster / indoor-friendly fallback.
  */
 
 export function toRadians(value: number): number {
@@ -21,14 +21,23 @@ export function haversineKm(startLat: number, startLng: number, endLat: number, 
   return earthRadiusKm * c;
 }
 
-/**
- * Same flow as Live-Location/src/App.jsx — one getCurrentPosition call when the user taps the button
- * (keeps the permission prompt tied to the click where possible).
- */
-export function getBrowserPosition(): Promise<{ lat: number; lng: number }> {
+function geoMessage(code: number, fallback: string): string {
+  if (code === 1) {
+    return "Location is blocked for this site. Click the lock or ⊕ in the address bar → Site settings → Location → Allow, then try Check in again.";
+  }
+  if (code === 2) {
+    return "Position unavailable. Turn on GPS / location on your phone or PC, move near a window, and try again.";
+  }
+  if (code === 3) {
+    return "Location timed out. Try again; if indoors, wait a few seconds on the first attempt.";
+  }
+  return fallback || "Unable to read your location.";
+}
+
+function readPosition(options: PositionOptions): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("Geolocation is not supported by your browser."));
+      reject(new Error("Your browser does not support geolocation."));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -39,22 +48,32 @@ export function getBrowserPosition(): Promise<{ lat: number; lng: number }> {
         });
       },
       (geoError) => {
-        let msg = "Unable to fetch your location.";
-        if (geoError && typeof geoError.code === "number") {
-          if (geoError.code === 1) {
-            msg =
-              "Location is off for this site. Turn it on: use the lock or info icon in the address bar → Site settings → Location → Allow, then tap Get my location again.";
-          } else if (geoError.code === 2) {
-            msg = "Location unavailable. Turn on GPS / location services on your device and try again.";
-          } else if (geoError.code === 3) {
-            msg = "Location request timed out. Try again near a window or outdoors.";
-          } else if (geoError.message) {
-            msg = geoError.message;
-          }
-        }
-        reject(new Error(msg));
+        const code = geoError && typeof geoError.code === "number" ? geoError.code : 0;
+        const raw = geoError && "message" in geoError && typeof geoError.message === "string" ? geoError.message : "";
+        reject(new Error(geoMessage(code, raw)));
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+      options,
     );
   });
+}
+
+/**
+ * Resolves current lat/lng. Uses two attempts so indoor / laptop Wi‑Fi often still works.
+ */
+export async function getBrowserPosition(): Promise<{ lat: number; lng: number }> {
+  if (typeof window !== "undefined" && !window.isSecureContext) {
+    throw new Error(
+      "Location only works on a secure page. Use https:// or open the app at http://localhost:3000 (or 127.0.0.1). Plain http:// on a random LAN IP is often blocked by the browser.",
+    );
+  }
+  try {
+    return await readPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 14000 });
+  } catch (e) {
+    try {
+      return await readPosition({ enableHighAccuracy: false, maximumAge: 120000, timeout: 22000 });
+    } catch {
+      if (e instanceof Error) throw e;
+      throw new Error("Location failed.");
+    }
+  }
 }

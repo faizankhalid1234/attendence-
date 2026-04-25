@@ -49,3 +49,26 @@ export function summarizeSeries(rows: { status: DayStatus }[]) {
     { complete: 0, pending: 0, absent: 0, fake: 0 },
   );
 }
+
+/** One chart row for a single calendar day (member detail modal). */
+export function buildSingleDayChartRow(
+  dateYmd: string,
+  row: HistoryRow | undefined,
+): { day: string; full: string; status: DayStatus; statusValue: number }[] {
+  let status: DayStatus = "absent";
+  if (row?.isFake) status = "fake";
+  else if (row?.checkedInAt && row.checkedOutAt) status = "complete";
+  else if (row?.checkedInAt) status = "pending";
+  const statusValue = status === "complete" ? 4 : status === "pending" ? 3 : status === "fake" ? 2 : 1;
+  return [{ day: dateYmd.slice(8), full: dateYmd, status, statusValue }];
+}
+
+/** All YYYY-MM-DD strings in the same calendar month as `anchorYmd` (inclusive), ascending. */
+export function datesInMonthOf(anchorYmd: string): string[] {
+  const y = Number(anchorYmd.slice(0, 4));
+  const m = Number(anchorYmd.slice(5, 7));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return [];
+  const count = new Date(y, m, 0).getDate();
+  const prefix = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}`;
+  return Array.from({ length: count }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`);
+}

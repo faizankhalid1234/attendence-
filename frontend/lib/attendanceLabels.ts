@@ -17,6 +17,9 @@ export const L = {
   thDay: "Day",
   thCheckInTime: "Check-in time",
   thCheckOutTime: "Check-out time",
+  thLocation: "Location",
+  coordNotRecorded: "GPS not saved for this mark",
+  mapLink: "Map",
   thStatus: "Status",
   thPhotos: "Photos",
   recordsTitle: "Attendance history",
@@ -24,6 +27,7 @@ export const L = {
 
   linkCheckInPhoto: "Check-in photo",
   linkCheckOutPhoto: "Check-out photo",
+  dayDetailOpenFull: "Open full size",
 
   pieComplete: "Complete",
   piePending: "Pending",
@@ -42,7 +46,30 @@ export const L = {
 
   submitSectionTitle: "Submit for today",
   submitSectionHelp:
-    "Use location + photo first. Then tap only the button that matches what you are doing: arrival = Check in, leaving = Check out.",
+    "One tap on Check in or Check out asks for your location and camera, captures a live photo, and sends attendance automatically.",
+  monthByDateTitle: "Attendance by day",
+  monthByDateHelp: "Tap a row to open photo links for that day.",
+  monthPickerLabel: "Month",
+  dayDetailChartTitle: "That day",
+  dayDetailClose: "Close",
+  dayDetailNoPhotos: "No photos for this day.",
+  permModalLocationTitle: "Turn on location",
+  permModalLocationBody:
+    "Allow location for this site (address bar lock or info icon → Site settings → Location → Allow). Turn on GPS / location services on your device, then try Check in or Check out again.",
+  permModalCameraTitle: "Turn on camera",
+  permModalCameraBody:
+    "A live photo is required. Allow camera access when the browser asks, or enable it in site settings for this page, then try again.",
+  permModalClose: "Got it",
+  liveCaptureTitleCheckIn: "Check in — camera",
+  liveCaptureTitleCheckOut: "Check out — camera",
+  liveCaptureLocating: "Getting location…",
+  liveCaptureStartingCamera: "Starting camera…",
+  liveCaptureHelp: "You should see yourself below. When ready, tap Capture & submit.",
+  btnCancelLiveCapture: "Cancel",
+  btnCaptureSubmit: "Capture & submit",
+  liveCaptureSaving: "Saving…",
+  liveCaptureGotLocation: "Location received — it will be sent with your photo.",
+  permModalDetailLabel: "Details",
   btnSubmitCheckIn: "Check in",
   btnSubmitCheckOut: "Check out",
   submitCardArrivalTag: "Arrival",
@@ -69,7 +96,11 @@ export const L = {
 
   coTeamHeader: "Team reports",
   coTeamTitle: "Your company only",
-  coTeamHelp: "Each block below is a separate section.",
+  coTeamHelp: "Team totals, the member table, and the selected member’s daily chart are grouped in one panel.",
+  coTeamRosterIntro:
+    "Counts below are for the date range you pick. Open any team member to see their full day-by-day record on its own page.",
+  coMembersClickOpen: "Click a card to open that member’s attendance table (no graphs — just their days and status).",
+  coOpenMemberPage: "View full record →",
 
   coF1: "Section 1 — Team summary",
   coF1Title: "All members combined",
@@ -90,6 +121,32 @@ export const L = {
   coDuration: "Duration (days)",
   coRefresh: "Refresh",
   coNoMembers: "No members yet — add a member first.",
+
+  coViewOnlyBanner:
+    "View only: members mark their own attendance from the member app. You cannot check in or check out on behalf of anyone.",
+  coMembersRosterTitle: "Your team",
+  coMembersRosterHelp: "People you have added to this company. Tap one to see their counts and day-by-day table.",
+  coPickMemberTitle: "Member overview",
+  coPickMemberHelp: "Summary for the date range above. Absent = no attendance mark that day (not the same as approved paid leave).",
+  coStatFullDays: "Full days",
+  coStatFullDaysSub: "In & out both",
+  coStatPending: "Pending",
+  coStatPendingSub: "Check-in only",
+  coStatFake: "Fake",
+  coStatFakeSub: "Outside radius",
+  coStatAbsent: "No mark",
+  coStatAbsentSub: "No attendance",
+  coStatPresent: "Days with check-in",
+  coStatPresentSub: "Complete + pending",
+  coDailyTableTitle: "Day-by-day",
+  coThDate: "Date",
+  coThDay: "Day",
+  coThStatus: "Status",
+  coTeamMixTitle: "All members combined",
+
+  coBackToTeam: "← Back to team",
+  coMemberReportTitle: "Attendance record",
+  coMemberReportSubtitle: "Day-by-day for the range below. Members mark their own attendance.",
 } as const;
 
 export const chartTooltip: Record<"complete" | "pending" | "absent" | "fake", string> = {

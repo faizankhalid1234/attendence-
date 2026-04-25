@@ -29,7 +29,7 @@ export default function PortalNav() {
 
   return (
     <nav
-      className="flex min-w-0 w-full justify-center gap-0.5 overflow-x-auto rounded-full border border-slate-200/80 bg-white/70 p-1 shadow-inner dark:border-zinc-700/80 dark:bg-zinc-900/60 sm:flex-1 sm:px-2"
+      className="flex min-w-0 w-full justify-center gap-0.5 overflow-x-auto rounded-full border border-gray-200 bg-white p-1 shadow-inner sm:flex-1 sm:px-2"
       aria-label="Main"
     >
       {links.map(({ href, label }) => {
@@ -40,8 +40,8 @@ export default function PortalNav() {
             href={href}
             className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition sm:px-4 sm:text-sm ${
               active
-                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md dark:from-indigo-500 dark:to-violet-500"
-                : "text-slate-600 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                ? "bg-gray-800 text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-100"
             }`}
           >
             {label}

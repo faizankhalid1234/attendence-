@@ -22,11 +22,11 @@ export default function CompanyDashboard() {
           title={companyName || "Your company"}
           subtitle={
             companyName
-              ? `${userName ? `${userName} · ` : ""}Manage team, reports, and members from here. Shift and map settings are configured from Django Admin.`
+              ? `${userName ? `${userName} · ` : ""}Review attendance and manage who you have hired. Only members can mark check-in/out from their account — you cannot submit attendance for them. Shift and office location are set in Django Admin.`
               : "After login, your company name and tools appear here."
           }
           showLogout
-          logoutClassName="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-white/20"
+          logoutClassName="rounded-md border border-gray-400 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100"
         />
 
         <section
@@ -58,35 +58,25 @@ export default function CompanyDashboard() {
           </div>
         </section>
 
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 px-1">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/15 text-xl ring-1 ring-emerald-500/30 dark:bg-emerald-400/10">
-              📊
-            </span>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Block 1 — Team attendance & reports</h2>
-              <p className="text-sm text-slate-600 dark:text-emerald-100/80">Charts, date range, and member trends.</p>
-            </div>
+        <section className="space-y-3">
+          <div className="px-1">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">Attendance & team</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-zinc-400">
+              Click any team member card to open their own page with a full day-by-day table for the range you select.
+            </p>
           </div>
-          <div className="rounded-3xl ring-1 ring-emerald-500/20 ring-offset-4 ring-offset-zinc-950">
-            <CompanyTeamAttendance />
-          </div>
-        </div>
+          <CompanyTeamAttendance />
+        </section>
 
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 px-1">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-500/15 text-xl ring-1 ring-violet-400/35 dark:bg-violet-400/10">
-              👥
-            </span>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Block 2 — Team members</h2>
-              <p className="text-sm text-slate-600 dark:text-violet-100/85">Invite new staff by email and review the full member list.</p>
-            </div>
+        <section className="space-y-3">
+          <div className="px-1">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">Add members</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-zinc-400">
+              New hires appear in the list below and in attendance reports after their account is created.
+            </p>
           </div>
-          <div className="rounded-3xl ring-1 ring-violet-500/25 ring-offset-4 ring-offset-zinc-950">
-            <MemberManager />
-          </div>
-        </div>
+          <MemberManager />
+        </section>
       </div>
   );
 }

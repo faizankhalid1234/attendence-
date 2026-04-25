@@ -1,5 +1,8 @@
 import datetime
 import json
+import logging
+import uuid
+import math
 import os
 import urllib.error
 import urllib.parse
@@ -7,7 +10,9 @@ import urllib.request
 from decimal import Decimal
 from functools import wraps
 from zoneinfo import ZoneInfo
+
 from django.conf import settings as django_settings
+from django.db import DatabaseError, IntegrityError
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +32,23 @@ from .utils import (
     set_auth_cookie,
     verify_password,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _clamp_distance_meters(distance_m: float) -> int:
+    """PositiveIntegerField-safe distance in meters (haversine output)."""
+    if not math.isfinite(distance_m) or distance_m < 0:
+        return 0
+    v = int(round(min(distance_m, 2_000_000_000)))
+    return max(0, min(v, 2_147_483_647))
+
+
+def _geo_decimal(v: float) -> Decimal:
+    """Fit company/attendance DecimalField(max_digits=10, decimal_places=7)."""
+    if not math.isfinite(v):
+        raise ValueError("non-finite coordinate")
+    return Decimal(str(v)).quantize(Decimal("0.0000001"))
 
 
 def parse_body(request):
@@ -550,6 +572,16 @@ def company_attendance_reports(request):
     start_d = end_d - datetime.timedelta(days=days - 1)
 
     members = list(User.objects.filter(company_id=company_id, role=Role.MEMBER).order_by("name"))
+    filter_raw = (request.GET.get("memberId") or request.GET.get("member_id") or "").strip()
+    if filter_raw:
+        try:
+            fid = uuid.UUID(filter_raw)
+        except ValueError:
+            return JsonResponse({"error": "memberId must be a valid UUID."}, status=400)
+        members = [m for m in members if m.id == fid]
+        if not members:
+            return JsonResponse({"error": "Member not found in your company."}, status=404)
+
     member_ids = [m.id for m in members]
 
     att_map = {}
@@ -834,72 +866,101 @@ def member_attendance(request):
     if photo.size > 5 * 1024 * 1024:
         return JsonResponse({"error": "Photo must be smaller than 5MB."}, status=400)
 
+    try:
+        if hasattr(photo, "seek"):
+            photo.seek(0)
+    except OSError:
+        pass
+
     office_lat = float(company.office_latitude)
     office_lng = float(company.office_longitude)
     distance_m = haversine_meters(lat, lng, office_lat, office_lng)
     is_fake = distance_m > float(company.location_radius_meters)
+    dm = _clamp_distance_meters(distance_m)
+
+    try:
+        lat_dec = _geo_decimal(lat)
+        lng_dec = _geo_decimal(lng)
+    except ValueError:
+        return JsonResponse({"error": "Invalid location coordinates (non-finite)."}, status=400)
 
     today_local = company_local_date(company, now)
     existing = Attendance.objects.filter(member_id=member_id, date=today_local).first()
-    lat_dec = Decimal(str(lat))
-    lng_dec = Decimal(str(lng))
 
-    if not existing:
-        if action == "check_out":
+    try:
+        if not existing:
+            if action == "check_out":
+                return JsonResponse(
+                    {"error": "Check in first — there is no attendance record for today yet."},
+                    status=400,
+                )
+            row = Attendance.objects.create(
+                member_id=member_id,
+                date=today_local,
+                checked_in_at=now,
+                check_in_latitude=lat_dec,
+                check_in_longitude=lng_dec,
+                check_in_photo=photo,
+                check_in_distance_meters=dm,
+                is_check_in_fake=is_fake,
+            )
             return JsonResponse(
-                {"error": "Check in first — there is no attendance record for today yet."},
+                {
+                    "message": "Checked in",
+                    "row": {"id": str(row.id)},
+                    "distanceMeters": dm,
+                    "isFake": is_fake,
+                }
+            )
+        if not existing.checked_in_at:
+            return JsonResponse(
+                {
+                    "error": "Today's attendance row has no check-in time. Ask an admin to fix or delete the row in Django Admin.",
+                },
                 status=400,
             )
-        row = Attendance.objects.create(
-            member_id=member_id,
-            date=today_local,
-            checked_in_at=now,
-            check_in_latitude=lat_dec,
-            check_in_longitude=lng_dec,
-            check_in_photo=photo,
-            check_in_distance_meters=int(distance_m),
-            is_check_in_fake=is_fake,
-        )
-        return JsonResponse(
-            {
-                "message": "Checked in",
-                "row": {"id": str(row.id)},
-                "distanceMeters": int(distance_m),
-                "isFake": is_fake,
-            }
-        )
-    if not existing.checked_out_at:
-        if action == "check_in":
+        if not existing.checked_out_at:
+            if action == "check_in":
+                return JsonResponse(
+                    {"error": "You already checked in today. Use Check out when you leave."},
+                    status=400,
+                )
+            existing.checked_out_at = now
+            existing.check_out_latitude = lat_dec
+            existing.check_out_longitude = lng_dec
+            existing.check_out_photo = photo
+            existing.check_out_distance_meters = dm
+            existing.is_check_out_fake = is_fake
+            existing.save()
             return JsonResponse(
-                {"error": "You already checked in today. Use Check out when you leave."},
-                status=400,
+                {
+                    "message": "Checked out",
+                    "row": {"id": str(existing.id)},
+                    "distanceMeters": dm,
+                    "isFake": existing.is_check_in_fake or existing.is_check_out_fake,
+                }
             )
-        existing.checked_out_at = now
-        existing.check_out_latitude = lat_dec
-        existing.check_out_longitude = lng_dec
-        existing.check_out_photo = photo
-        existing.check_out_distance_meters = int(distance_m)
-        existing.is_check_out_fake = is_fake
-        existing.save(
-            update_fields=[
-                "checked_out_at",
-                "check_out_latitude",
-                "check_out_longitude",
-                "check_out_photo",
-                "check_out_distance_meters",
-                "is_check_out_fake",
-                "updated_at",
-            ]
+        return JsonResponse({"message": "Attendance already completed for today"})
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "Attendance for this day is already recorded — refresh the page and try again."},
+            status=409,
         )
+    except DatabaseError as exc:
+        logger.exception("member_attendance database error")
         return JsonResponse(
             {
-                "message": "Checked out",
-                "row": {"id": str(existing.id)},
-                "distanceMeters": int(distance_m),
-                "isFake": existing.is_check_in_fake or existing.is_check_out_fake,
-            }
+                "error": "Database error while saving attendance. On the server, run: python manage.py migrate",
+                "hint": str(exc) if django_settings.DEBUG else "",
+            },
+            status=500,
         )
-    return JsonResponse({"message": "Attendance already completed for today"})
+    except Exception as exc:
+        logger.exception("member_attendance save failed")
+        payload: dict = {"error": "Could not save attendance — please try again."}
+        if django_settings.DEBUG:
+            payload["hint"] = str(exc)
+        return JsonResponse(payload, status=500)
 
 
 @require_http_methods(["GET"])
