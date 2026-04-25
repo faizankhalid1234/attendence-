@@ -5,8 +5,7 @@ import { apiFetch, readJsonSafe } from "@/lib/api";
 import { getBrowserPosition } from "@/lib/liveLocation";
 import { L } from "@/lib/attendanceLabels";
 import { mediaSrc } from "@/lib/mediaUrl";
-import SummaryPie from "@/app/components/charts/SummaryPie";
-import { buildMemberDaySeries, datesInMonthOf, summarizeSeries } from "@/lib/attendanceSeries";
+import { datesInMonthOf } from "@/lib/attendanceSeries";
 
 type CompanyOption = { id: string; name: string };
 
@@ -191,44 +190,91 @@ function geoPair(lat: unknown, lng: unknown): { lat: number; lng: number } | nul
   return { lat: a, lng: b };
 }
 
-/** Month table: GPS only (Check-out | Location | Status). */
+/** Compact label for distance from office (meters in API). */
+function formatDistanceMeters(dm: unknown): string | null {
+  if (dm == null || dm === "") return null;
+  const n = Number(dm);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n >= 1000) {
+    const km = n / 1000;
+    const digits = km >= 100 ? 0 : 1;
+    return `${km.toFixed(digits)} km`;
+  }
+  return `${Math.round(n)} m`;
+}
+
+/** Month table: GPS only — compact + light visual hierarchy (IN/OUT). */
 function MonthLocationCell({ row }: { row: Row | undefined }) {
   if (!row?.checkedInAt) {
     return <span className="text-slate-400">—</span>;
   }
 
-  const linkCls =
-    "inline-block font-medium text-indigo-600 underline decoration-indigo-200 underline-offset-2 hover:text-indigo-800";
+  const mapChipCls =
+    "inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 shadow-sm shadow-indigo-900/5 ring-1 ring-inset ring-indigo-100/90 transition hover:bg-indigo-100 hover:text-indigo-900 hover:ring-indigo-200/80";
 
-  const block = (label: string, latKey: keyof Row, lngKey: keyof Row, dmKey: keyof Row) => {
+  const line = (
+    variant: "in" | "out",
+    label: string,
+    latKey: keyof Row,
+    lngKey: keyof Row,
+    dmKey: keyof Row,
+  ) => {
     const g = geoPair(row[latKey], row[lngKey]);
-    const dm = row[dmKey];
+    const dmStr = formatDistanceMeters(row[dmKey]);
+    const accent =
+      variant === "in"
+        ? "border-l-emerald-400/65 from-emerald-50/40 to-transparent"
+        : "border-l-violet-400/65 from-violet-50/40 to-transparent";
+    const pill =
+      variant === "in"
+        ? "bg-emerald-100/90 text-emerald-800 ring-emerald-200/60"
+        : "bg-violet-100/90 text-violet-800 ring-violet-200/60";
+
     return (
-      <div className="rounded-md border border-slate-100/90 bg-slate-50/50 px-2 py-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-        {g ? (
-          <>
-            <p className="mt-0.5 font-mono text-[11px] leading-snug tabular-nums text-slate-800">{fmtCoord(g.lat, g.lng)}</p>
-            {dm != null && Number.isFinite(Number(dm)) ? (
-              <p className="mt-0.5 text-[11px] text-slate-600">{Math.round(Number(dm))} m</p>
-            ) : null}
-            <p className="mt-1">
-              <a className={linkCls} href={osmHref(g.lat, g.lng)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                {L.mapLink}
-              </a>
-            </p>
-          </>
-        ) : (
-          <p className="mt-0.5 text-[11px] text-amber-900/90">{L.coordNotRecorded}</p>
-        )}
+      <div
+        className={`flex min-w-0 gap-2 rounded-md border-l-[3px] bg-gradient-to-r py-1 pl-2 pr-1 ${accent}`}
+      >
+        <span
+          className={`mt-0.5 h-fit shrink-0 rounded px-1 py-px text-[9px] font-bold uppercase tracking-wide ring-1 ring-inset ${pill}`}
+        >
+          {label}
+        </span>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          {g ? (
+            <>
+              <p className="font-mono text-[10px] leading-snug tracking-tight text-slate-800">{fmtCoord(g.lat, g.lng)}</p>
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-none text-slate-600">
+                {dmStr ? (
+                  <span className="tabular-nums text-slate-500">
+                    <span className="text-slate-300" aria-hidden>
+                      ·{" "}
+                    </span>
+                    {dmStr}
+                  </span>
+                ) : null}
+                <a
+                  className={mapChipCls}
+                  href={osmHref(g.lat, g.lng)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {L.mapLink}
+                </a>
+              </p>
+            </>
+          ) : (
+            <p className="text-[10px] leading-snug text-amber-800/90">{L.coordNotRecorded}</p>
+          )}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="max-w-[14rem] space-y-2">
-      {block("IN", "checkInLatitude", "checkInLongitude", "checkInDistanceMeters")}
-      {row.checkedOutAt ? block("OUT", "checkOutLatitude", "checkOutLongitude", "checkOutDistanceMeters") : null}
+    <div className="min-w-0 max-w-[13rem] space-y-1">
+      {line("in", "IN", "checkInLatitude", "checkInLongitude", "checkInDistanceMeters")}
+      {row.checkedOutAt ? line("out", "OUT", "checkOutLatitude", "checkOutLongitude", "checkOutDistanceMeters") : null}
     </div>
   );
 }
@@ -551,28 +597,6 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
     : undefined;
   const canSubmitCheckIn = Boolean(company?.localToday && !todayRow?.checkedInAt);
   const canSubmitCheckOut = Boolean(company?.localToday && todayRow?.checkedInAt && !todayRow?.checkedOutAt);
-  const todayAttendanceDone = Boolean(todayRow?.checkedInAt && todayRow?.checkedOutAt);
-
-  const memberSeries = useMemo(
-    () =>
-      buildMemberDaySeries(
-        history.map((r) => ({ date: r.date, checkedInAt: r.checkedInAt, checkedOutAt: r.checkedOutAt, isFake: r.isFake })),
-        company?.localToday,
-        14,
-      ),
-    [history, company?.localToday],
-  );
-  const memberSummary = useMemo(() => summarizeSeries(memberSeries), [memberSeries]);
-  const memberPie = useMemo(
-    () => [
-      { name: L.pieComplete, value: memberSummary.complete, color: "#22c55e" },
-      { name: L.piePending, value: memberSummary.pending, color: "#f59e0b" },
-      { name: L.pieFake, value: memberSummary.fake, color: "#ef4444" },
-      { name: L.pieAbsent, value: memberSummary.absent, color: "#94a3b8" },
-    ],
-    [memberSummary],
-  );
-
   const ymEffective = useMemo(() => {
     if (!todayYm) return "";
     if (monthChoices.length === 0) return todayYm;
@@ -593,9 +617,9 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
   }, [detailDate, history]);
 
   const cell =
-    "border-b border-slate-200/90 bg-white/90 px-3 py-2.5 align-top text-sm text-slate-800 last:border-b-0 sm:px-4";
+    "border-b border-slate-200/80 bg-white/90 px-3 py-2 align-top text-sm text-slate-800 last:border-b-0 sm:px-4";
   const head =
-    "border-b border-indigo-100/90 bg-gradient-to-r from-indigo-50/90 to-violet-50/70 px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-indigo-950/90 sm:px-4";
+    "border-b border-indigo-100/85 bg-gradient-to-r from-indigo-50/85 via-white to-violet-50/70 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-indigo-950/90 sm:px-4";
   const panelShell = embedded
     ? "w-full overflow-hidden text-sm text-slate-800"
     : "w-full overflow-hidden rounded-2xl border border-indigo-100/80 bg-gradient-to-b from-white via-indigo-50/20 to-violet-50/25 text-sm text-slate-800 shadow-lg shadow-indigo-950/10 ring-1 ring-slate-900/5";
@@ -614,23 +638,6 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
             <>
               <tr>
                 <th colSpan={2} className={head}>
-                  {L.field1Title}
-                </th>
-              </tr>
-              <tr>
-                <td colSpan={2} className={cell}>
-                  <p className="mb-3 rounded-lg bg-white/80 px-2 py-1.5 text-xs leading-relaxed text-slate-600 ring-1 ring-slate-200/60">
-                    {L.statusComplete}: {memberSummary.complete} · {L.statusPending}: {memberSummary.pending} ·{" "}
-                    {L.statusFake}: {memberSummary.fake} · {L.statusAbsent}: {memberSummary.absent}
-                  </p>
-                  <div className="mx-auto max-w-md rounded-2xl border border-indigo-100/80 bg-white/90 p-3 shadow-inner shadow-indigo-950/5">
-                    <SummaryPie data={memberPie} />
-                  </div>
-                </td>
-              </tr>
-
-              <tr>
-                <th colSpan={2} className={head}>
                   {L.submitSectionTitle}
                 </th>
               </tr>
@@ -638,22 +645,12 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                 <td colSpan={2} className={`${cell} !bg-gradient-to-br from-indigo-50/50 via-white to-violet-50/40`}>
                   <div className="rounded-2xl border border-indigo-100/90 bg-white/70 p-4 shadow-sm backdrop-blur-sm sm:p-5">
                     {company && (
-                      <p className="text-xs leading-relaxed text-slate-600">
-                        <span className="font-semibold text-indigo-950/90">Shift</span> {company.workStart}–{company.workEnd}{" "}
-                        <span className="rounded-md bg-indigo-100/80 px-1.5 py-0.5 font-mono text-[11px] text-indigo-900">
-                          {company.timezone}
-                        </span>
-                        . {L.submitSectionHelp}
-                      </p>
+                      <div className="mb-4 rounded-xl border border-indigo-100/90 bg-gradient-to-r from-indigo-50/70 to-violet-50/70 px-3 py-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-indigo-700/90">Company</p>
+                        <p className="mt-0.5 text-sm font-bold text-indigo-950">{company.name || "—"}</p>
+                      </div>
                     )}
-                    {company?.localToday && (
-                      <p className="mt-3 text-sm font-medium text-indigo-950/90">
-                        {todayAttendanceDone && L.hintSubmitComplete}
-                        {!todayAttendanceDone && canSubmitCheckIn && L.submitNextCheckIn}
-                        {!todayAttendanceDone && canSubmitCheckOut && L.submitNextCheckOut}
-                      </p>
-                    )}
-                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <button
                         type="button"
                         disabled={
@@ -699,7 +696,7 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
       </table>
 
       {company?.localToday && monthDates.length > 0 && (
-        <div className="overflow-x-auto border-t border-indigo-100/80 bg-white/40">
+        <div className="overflow-x-auto border-t border-indigo-100/80 bg-gradient-to-b from-white/70 to-indigo-50/20">
           <table className="w-full min-w-[48rem] border-collapse">
             <thead>
               <tr>
@@ -714,7 +711,7 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                       <select
                         value={ymEffective}
                         onChange={(e) => setViewMonthYm(e.target.value)}
-                        className="max-w-[14rem] rounded-lg border border-indigo-200/80 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/25"
+                        className="max-w-[14rem] rounded-lg border border-indigo-200/80 bg-white/95 px-3 py-1.5 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/25"
                       >
                         {monthChoices.map((ym) => (
                           <option key={ym} value={ym}>
@@ -730,7 +727,7 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                 <th className={`${head} w-[10rem]`}>{L.thDay}</th>
                 <th className={head}>{L.thCheckInTime}</th>
                 <th className={head}>{L.thCheckOutTime}</th>
-                <th className={`${head} w-[14rem]`}>{L.thLocation}</th>
+                <th className={`${head} w-[13rem] max-w-[13rem]`}>{L.thLocation}</th>
                 <th className={`${head} w-[7.5rem] text-right`}>{L.thStatus}</th>
               </tr>
             </thead>
@@ -753,16 +750,16 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                   isFake: false,
                 };
                 const st = rowStatusMeta(synthetic);
-                const stripe = idx % 2 === 0 ? "bg-white/95" : "bg-indigo-50/25";
+                const stripe = idx % 2 === 0 ? "bg-white/95" : "bg-indigo-50/[0.22]";
                 return (
                   <tr
                     key={dateYmd}
-                    className={`cursor-pointer border-t border-indigo-100/50 transition hover:bg-violet-50/40 ${stripe}`}
+                    className={`group cursor-pointer border-t border-indigo-100/45 transition-colors duration-150 hover:bg-violet-50/45 ${stripe}`}
                     onClick={() => setDetailDate(dateYmd)}
                   >
                     <td className={cell}>
                       <span className="text-gray-500">{weekdayShort(dateYmd, tz)}</span>{" "}
-                      <span className="font-mono text-sm font-semibold tabular-nums text-gray-900">{dateYmd}</span>
+                      <span className="font-mono text-[13px] font-semibold tabular-nums text-gray-900">{dateYmd}</span>
                     </td>
                     <td className={`${cell} text-xs tabular-nums text-gray-800`}>
                       {row?.checkedInAt ? formatCompanyDateTime(row.checkedInAt, tz) : "—"}
@@ -774,7 +771,9 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                       <MonthLocationCell row={row} />
                     </td>
                     <td className={`${cell} text-right align-top`}>
-                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${st.className}`}>{st.primary}</span>
+                      <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold shadow-sm shadow-slate-900/5 ${st.className}`}>
+                        {st.primary}
+                      </span>
                       <span className="mt-0.5 block text-right text-[10px] font-normal leading-tight text-gray-500">{st.detail}</span>
                     </td>
                   </tr>

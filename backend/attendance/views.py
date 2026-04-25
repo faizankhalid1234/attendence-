@@ -58,6 +58,34 @@ def parse_body(request):
         return {}
 
 
+def _first_float(body: dict, *keys: str) -> float | None:
+    for key in keys:
+        if key not in body:
+            continue
+        raw = body.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} must be numeric.")
+    return None
+
+
+def _first_int(body: dict, *keys: str) -> int | None:
+    for key in keys:
+        if key not in body:
+            continue
+        raw = body.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} must be numeric.")
+    return None
+
+
 def require_valid_iana_timezone(tz_name: str) -> str | None:
     raw = (tz_name or "").strip()
     if not raw:
@@ -340,15 +368,23 @@ def super_admin_companies(request):
         )
 
     try:
-        office_lat = float(body.get("officeLatitude", 24.860966))
-        office_lng = float(body.get("officeLongitude", 67.001100))
-        location_radius_meters = int(body.get("locationRadiusMeters", 200))
-    except (ValueError, TypeError):
+        # Auto-fill support: clients can send admin/current location keys too.
+        office_lat = _first_float(body, "officeLatitude", "adminLatitude", "latitude", "lat")
+        office_lng = _first_float(body, "officeLongitude", "adminLongitude", "longitude", "lng")
+        location_radius_meters = _first_int(body, "locationRadiusMeters", "officeRadiusMeters", "radiusMeters", "radius")
+    except ValueError:
         return JsonResponse({"error": "Office latitude/longitude and radius must be numeric values."}, status=400)
-    if "officeLatitude" in body or "officeLongitude" in body:
-        if not (-90 <= office_lat <= 90 and -180 <= office_lng <= 180):
-            return JsonResponse({"error": "Office latitude/longitude values are out of valid range."}, status=400)
-    if "locationRadiusMeters" in body and (location_radius_meters < 20 or location_radius_meters > 5000):
+
+    if (office_lat is None) != (office_lng is None):
+        return JsonResponse({"error": "Both office latitude and longitude are required together."}, status=400)
+    if office_lat is None or office_lng is None:
+        office_lat, office_lng = 24.860966, 67.001100
+    if not (-90 <= office_lat <= 90 and -180 <= office_lng <= 180):
+        return JsonResponse({"error": "Office latitude/longitude values are out of valid range."}, status=400)
+
+    if location_radius_meters is None:
+        location_radius_meters = 200
+    if location_radius_meters < 20 or location_radius_meters > 5000:
         return JsonResponse({"error": "locationRadiusMeters must be between 20 and 5000."}, status=400)
 
     if not company_name or not company_email or not admin_name:
@@ -526,21 +562,23 @@ def company_settings(request):
                 status=400,
             )
         company.timezone = tz
-    if "officeLatitude" in body and "officeLongitude" in body:
-        try:
-            olat = float(body.get("officeLatitude"))
-            olng = float(body.get("officeLongitude"))
-        except (TypeError, ValueError):
-            return JsonResponse({"error": "officeLatitude / officeLongitude number hon."}, status=400)
+    try:
+        olat = _first_float(body, "officeLatitude", "adminLatitude", "latitude", "lat")
+        olng = _first_float(body, "officeLongitude", "adminLongitude", "longitude", "lng")
+    except ValueError:
+        return JsonResponse({"error": "officeLatitude / officeLongitude number hon."}, status=400)
+    if (olat is None) != (olng is None):
+        return JsonResponse({"error": "officeLatitude aur officeLongitude dono sath bhejein."}, status=400)
+    if olat is not None and olng is not None:
         if not (-90 <= olat <= 90 and -180 <= olng <= 180):
             return JsonResponse({"error": "Office lat/lng range galat."}, status=400)
         company.office_latitude = Decimal(str(olat))
         company.office_longitude = Decimal(str(olng))
-    if "locationRadiusMeters" in body:
-        try:
-            r = int(body.get("locationRadiusMeters"))
-        except (TypeError, ValueError):
-            return JsonResponse({"error": "locationRadiusMeters number hona chahiye."}, status=400)
+    try:
+        r = _first_int(body, "locationRadiusMeters", "officeRadiusMeters", "radiusMeters", "radius")
+    except ValueError:
+        return JsonResponse({"error": "locationRadiusMeters number hona chahiye."}, status=400)
+    if r is not None:
         if r < 20 or r > 5000:
             return JsonResponse({"error": "locationRadiusMeters 20-5000 ke beech hon."}, status=400)
         company.location_radius_meters = r
