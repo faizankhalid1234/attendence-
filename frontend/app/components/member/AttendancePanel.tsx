@@ -271,7 +271,9 @@ function jpegFileFromVideo(video: HTMLVideoElement, canvas: HTMLCanvasElement): 
   });
 }
 
-export default function AttendancePanel() {
+type AttendancePanelProps = { embedded?: boolean };
+
+export default function AttendancePanel({ embedded = false }: AttendancePanelProps) {
   const [history, setHistory] = useState<Row[]>([]);
   const [company, setCompany] = useState<CompanyRules | null>(null);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
@@ -594,9 +596,12 @@ export default function AttendancePanel() {
     "border-b border-slate-200/90 bg-white/90 px-3 py-2.5 align-top text-sm text-slate-800 last:border-b-0 sm:px-4";
   const head =
     "border-b border-indigo-100/90 bg-gradient-to-r from-indigo-50/90 to-violet-50/70 px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-indigo-950/90 sm:px-4";
+  const panelShell = embedded
+    ? "w-full overflow-hidden text-sm text-slate-800"
+    : "w-full overflow-hidden rounded-2xl border border-indigo-100/80 bg-gradient-to-b from-white via-indigo-50/20 to-violet-50/25 text-sm text-slate-800 shadow-lg shadow-indigo-950/10 ring-1 ring-slate-900/5";
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl border border-indigo-100/80 bg-gradient-to-b from-white via-indigo-50/20 to-violet-50/25 text-sm text-slate-800 shadow-lg shadow-indigo-950/10 ring-1 ring-slate-900/5">
+    <div className={panelShell}>
       {loadError && (
         <div className="border-b border-red-200/80 bg-gradient-to-r from-red-50 to-amber-50/40 px-4 py-3 text-sm font-medium text-red-900">
           {loadError}

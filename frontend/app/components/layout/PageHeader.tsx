@@ -10,6 +10,8 @@ type Props = {
   logoutClassName?: string;
   /** Rich header for company dashboard: logo + name only (omit long subtitle). */
   variant?: "default" | "company";
+  /** Use inside another card without own border box. */
+  embedded?: boolean;
 };
 
 /** Small monoline mark — reads clearly at ~20px. */
@@ -41,6 +43,7 @@ export default function PageHeader({
   showLogout,
   logoutClassName,
   variant = "default",
+  embedded = false,
 }: Props) {
   if (variant === "company") {
     return (
@@ -77,8 +80,12 @@ export default function PageHeader({
     );
   }
 
+  const shell = embedded
+    ? "px-0 py-0"
+    : "border border-gray-300 bg-gray-50 px-4 py-4 sm:px-6 dark:border-zinc-700 dark:bg-zinc-900/80";
+
   return (
-    <header className="border border-gray-300 bg-gray-50 px-4 py-4 sm:px-6 dark:border-zinc-700 dark:bg-zinc-900/80">
+    <header className={shell}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-zinc-400">{eyebrow}</p>

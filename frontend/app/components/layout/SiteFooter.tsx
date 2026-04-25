@@ -80,23 +80,35 @@ export default function SiteFooter() {
           <ol className="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm leading-relaxed text-slate-600 dark:border-zinc-800 dark:text-zinc-300">
             <li>
               <strong className="text-slate-800 dark:text-zinc-100">1. Setup</strong> — Companies and company-admin
-              accounts are created in Django Admin (backend). This web app is used for company admin and member sign-in
-              only.
+              accounts are created in <strong className="text-slate-800 dark:text-zinc-100">Django Admin</strong> (shift
+              hours, office GPS, allowed radius). This site is only for company admins and members to sign in.
             </li>
             <li>
-              <strong className="text-slate-800 dark:text-zinc-100">2. Company Admin</strong> — Logs in with the
-              company email, adds team members, and views team attendance reports (only their company&apos;s data).
-              Shift times and office reference are configured in Django Admin.
+              <strong className="text-slate-800 dark:text-zinc-100">2. Company admin dashboard</strong> — One main card:
+              role strip at the top, then <strong className="text-slate-800 dark:text-zinc-100">Your team</strong> with
+              each hire listed. Tap <strong className="text-slate-800 dark:text-zinc-100">View full record →</strong> to
+              open that person&apos;s own page (summary pie + day-by-day table for the date range you select). The
+              company portal is <strong className="text-slate-800 dark:text-zinc-100">view-only</strong> for
+              attendance: admins never submit check-in/out for someone else — only the member does, from the member
+              app.
             </li>
             <li>
-              <strong className="text-slate-800 dark:text-zinc-100">3. Member</strong> — Logs in, locks live GPS, takes
-              a live camera photo, and marks check-in / check-out during the allowed shift window. Each member sees
-              only their own history and summary.
+              <strong className="text-slate-800 dark:text-zinc-100">3. Add members</strong> — In the same card, fill
+              name and work email, then <strong className="text-slate-800 dark:text-zinc-100">Add member</strong>. Email
+              must be unique across the whole app (one account per email). Leave password empty to let the system
+              generate a temporary password (shown once if email is not sent), or set at least 8 characters yourself.
+              New people appear in the roster and in reports after they exist as users.
             </li>
             <li>
-              <strong className="text-slate-800 dark:text-zinc-100">4. Status</strong> — &quot;Complete&quot; means
-              both check-in and check-out that day; &quot;Pending&quot; means check-in only; &quot;Absent&quot; means no
-              attendance was recorded; &quot;Fake&quot; means the mark was outside the company radius.
+              <strong className="text-slate-800 dark:text-zinc-100">4. Member app</strong> — The member logs in with
+              their own credentials, allows location and camera, and during the shift window taps Check in / Check out.
+              The browser sends live GPS + a captured photo to the server; the month table shows times, status, and
+              saved GPS links when available.
+            </li>
+            <li>
+              <strong className="text-slate-800 dark:text-zinc-100">5. Status words</strong> — &quot;Complete&quot; =
+              check-in and check-out that day; &quot;Pending&quot; = check-in only; &quot;Absent&quot; = no mark;
+              &quot;Fake&quot; = mark outside the company radius (still stored for review).
             </li>
           </ol>
         </details>

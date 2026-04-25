@@ -30,10 +30,7 @@ export default function CompanyDashboard() {
 
           <div className="border-t border-slate-200/80 bg-gradient-to-b from-white via-emerald-50/25 to-slate-50/90 px-6 py-8 sm:px-10 sm:py-10 dark:border-zinc-800 dark:from-zinc-950 dark:via-emerald-950/10 dark:to-zinc-900">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Add members</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
-              New hires appear in the roster above and can sign in to mark attendance. Email must be unique across the whole app.
-            </p>
-            <div className="mt-6">
+            <div className="mt-4">
               <MemberManager embedded />
             </div>
           </div>
