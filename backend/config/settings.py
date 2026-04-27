@@ -89,9 +89,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {"default": {}}
 
-db_url = (os.getenv("DATABASE_URL", "") or "").strip()
-if db_url:
-    parsed = urlparse(db_url)
+
+def _valid_pg_url(raw: str) -> bool:
+    s = (raw or "").strip()
+    if not s or "://" not in s:
+        return False
+    p = urlparse(s)
+    return p.scheme in ("postgres", "postgresql", "psql") and bool(p.hostname)
+
+
+db_url = _env_first("DATABASE_URL", "DATABASE_PRIVATE_URL", "DATABASE_PUBLIC_URL", "POSTGRES_URL", "POSTGRESQL_URL")
+if _valid_pg_url(db_url):
+    parsed = urlparse(db_url.strip())
     parsed_name = unquote((parsed.path or "").lstrip("/"))
     override_name = _env_first("PGDATABASE", "POSTGRES_DB", "DB_NAME")
     db_name = (override_name or parsed_name).strip()
@@ -126,10 +135,28 @@ if db_url:
         "OPTIONS": {"sslmode": "require"},
     }
 else:
-    DATABASES["default"] = {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    # Fallback: Railway style discrete PG vars (without DATABASE_URL).
+    pg_host = _env_first("PGHOST", "POSTGRES_HOST", "DB_HOST")
+    pg_name = _env_first("PGDATABASE", "POSTGRES_DB", "DB_NAME")
+    pg_user = _env_first("PGUSER", "POSTGRES_USER", "DB_USER")
+    pg_password = _env_first("PGPASSWORD", "POSTGRES_PASSWORD", "DB_PASSWORD")
+    pg_port = int(_env_first("PGPORT", "POSTGRES_PORT", "DB_PORT") or "5432")
+
+    if pg_host and pg_name and pg_user:
+        DATABASES["default"] = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": pg_name[:63],
+            "USER": pg_user,
+            "PASSWORD": pg_password,
+            "HOST": pg_host,
+            "PORT": pg_port,
+            "OPTIONS": {"sslmode": "require"},
+        }
+    else:
+        DATABASES["default"] = {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
 
 
 # Password validation
