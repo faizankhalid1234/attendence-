@@ -39,6 +39,32 @@ SECRET_KEY = _django_secret_from_jwt_env()
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 
 ALLOWED_HOSTS = ["*"]
+if not DEBUG:
+    # Railway/Proxy par HTTPS detect karne ke liye.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# CSRF trusted origins:
+# - explicit env list (comma separated): CSRF_TRUSTED_ORIGINS
+# - frontend URL + common Railway domains
+_csrf_env = _env_first("CSRF_TRUSTED_ORIGINS")
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_env.split(",") if o.strip()] if _csrf_env else []
+
+for candidate in (
+    _env_first("FRONTEND_LOGIN_URL"),
+    "https://attendence-production.up.railway.app",
+    "https://*.up.railway.app",
+):
+    if not candidate:
+        continue
+    parsed_candidate = urlparse(candidate if "://" in candidate else f"https://{candidate}")
+    if parsed_candidate.scheme in ("http", "https") and parsed_candidate.netloc:
+        origin = f"{parsed_candidate.scheme}://{parsed_candidate.netloc}"
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
