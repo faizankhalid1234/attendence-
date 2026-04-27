@@ -19,5 +19,8 @@ fi
 echo "[deploy] Running Django migrations..."
 "${PYTHON_BIN}" backend/manage.py migrate --noinput
 
+echo "[deploy] Collecting static files..."
+"${PYTHON_BIN}" backend/manage.py collectstatic --noinput
+
 echo "[deploy] Starting Django API on ${PORT:-8000} (gunicorn)..."
 exec "${PYTHON_BIN}" -m gunicorn config.wsgi:application --chdir backend --bind 0.0.0.0:"${PORT:-8000}" --workers "${GUNICORN_WORKERS:-2}" --log-level warning
