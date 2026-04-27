@@ -21,6 +21,7 @@ from django.urls import path
 from attendance import views
 
 urlpatterns = [
+    path("", views.health),
     path("admin/", admin.site.urls),
     path("api/health", views.health),
     path("api/test-email", views.test_email),
