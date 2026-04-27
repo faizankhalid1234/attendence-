@@ -18,7 +18,8 @@ fi
 
 if [ ! -d "frontend/node_modules" ]; then
   echo "[deploy] frontend/node_modules missing. Installing frontend dependencies..."
-  npm ci --prefix frontend
+  npm cache clean --force
+  npm ci --prefix frontend --cache /tmp/.npm --prefer-online --no-audit
 fi
 
 echo "[deploy] Running Django migrations..."

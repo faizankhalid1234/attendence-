@@ -10,7 +10,11 @@
       "commands": [
         "python -m pip install --upgrade pip",
         "pip install -r backend/requirements.txt",
-        "npm ci --prefix frontend"
+        "npm cache clean --force",
+        "npm config set fetch-retries 5",
+        "npm config set fetch-retry-mintimeout 20000",
+        "npm config set fetch-retry-maxtimeout 120000",
+        "npm ci --prefix frontend --cache /tmp/.npm --prefer-online --no-audit"
       ]
     },
     "build": {
