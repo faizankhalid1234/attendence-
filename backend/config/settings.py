@@ -95,6 +95,20 @@ if db_url:
     parsed_name = unquote((parsed.path or "").lstrip("/"))
     override_name = _env_first("PGDATABASE", "POSTGRES_DB", "DB_NAME")
     db_name = (override_name or parsed_name).strip()
+    db_host = (
+        _env_first("PGHOST", "POSTGRES_HOST", "DB_HOST")
+        or (parsed.hostname or "").strip()
+    )
+    db_user = (
+        _env_first("PGUSER", "POSTGRES_USER", "DB_USER")
+        or (parsed.username or "").strip()
+    )
+    db_password = (
+        _env_first("PGPASSWORD", "POSTGRES_PASSWORD", "DB_PASSWORD")
+        or (parsed.password or "").strip()
+    )
+    db_port_raw = _env_first("PGPORT", "POSTGRES_PORT", "DB_PORT")
+    db_port = int(db_port_raw or parsed.port or 5432)
     # PostgreSQL identifier limit (Django validates this before connecting).
     # Some platforms occasionally inject a malformed DATABASE_URL path; in that case
     # allow explicit DB-name env vars to take precedence.
@@ -105,10 +119,10 @@ if db_url:
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": db_name,
-        "USER": parsed.username,
-        "PASSWORD": parsed.password,
-        "HOST": parsed.hostname,
-        "PORT": parsed.port or 5432,
+        "USER": db_user,
+        "PASSWORD": db_password,
+        "HOST": db_host,
+        "PORT": db_port,
         "OPTIONS": {"sslmode": "require"},
     }
 else:
