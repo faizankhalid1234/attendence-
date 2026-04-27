@@ -16,17 +16,8 @@ if ! "${PYTHON_BIN}" -c "import django" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -d "frontend/node_modules" ]; then
-  echo "[deploy] frontend/node_modules missing. Installing frontend dependencies..."
-  npm cache clean --force
-  npm ci --prefix frontend --cache /tmp/.npm --prefer-online --no-audit
-fi
-
 echo "[deploy] Running Django migrations..."
 "${PYTHON_BIN}" backend/manage.py migrate --noinput
 
-echo "[deploy] Starting Django API on 4000 (gunicorn)..."
-"${PYTHON_BIN}" -m gunicorn config.wsgi:application --chdir backend --bind 0.0.0.0:4000 --workers "${GUNICORN_WORKERS:-2}" --log-level warning &
-
-echo "[deploy] Starting Next.js on ${PORT:-3000}..."
-exec npm run start --prefix frontend -- -p "${PORT:-3000}"
+echo "[deploy] Starting Django API on ${PORT:-8000} (gunicorn)..."
+exec "${PYTHON_BIN}" -m gunicorn config.wsgi:application --chdir backend --bind 0.0.0.0:"${PORT:-8000}" --workers "${GUNICORN_WORKERS:-2}" --log-level warning
