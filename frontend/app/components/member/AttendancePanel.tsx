@@ -643,14 +643,14 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
               </tr>
               <tr>
                 <td colSpan={2} className={`${cell} !bg-gradient-to-br from-indigo-50/50 via-white to-violet-50/40`}>
-                  <div className="rounded-2xl border border-indigo-100/90 bg-white/70 p-4 shadow-sm backdrop-blur-sm sm:p-5">
+                  <div className="mx-auto w-full max-w-3xl rounded-xl border border-indigo-100/90 bg-white/75 p-3 shadow-sm backdrop-blur-sm sm:rounded-2xl sm:p-4 md:p-5">
                     {company && (
-                      <div className="mb-4 rounded-xl border border-indigo-100/90 bg-gradient-to-r from-indigo-50/70 to-violet-50/70 px-3 py-2.5">
+                      <div className="mb-3 rounded-lg border border-indigo-100/90 bg-gradient-to-r from-indigo-50/70 to-violet-50/70 px-2.5 py-2 sm:mb-4 sm:rounded-xl sm:px-3 sm:py-2.5">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-indigo-700/90">Company</p>
                         <p className="mt-0.5 text-sm font-bold text-indigo-950">{company.name || "—"}</p>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
                       <button
                         type="button"
                         disabled={
@@ -662,7 +662,7 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                           !canSubmitCheckIn
                         }
                         onClick={() => void beginMarkAttendance("check_in")}
-                        className="inline-flex min-h-[3rem] items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-md shadow-indigo-600/30 transition hover:from-indigo-500 hover:to-violet-500 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+                        className="inline-flex min-h-[2.75rem] items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 px-3 py-2.5 text-center text-sm font-semibold text-white shadow-md shadow-indigo-600/30 transition hover:from-indigo-500 hover:to-violet-500 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:min-h-[3rem] sm:rounded-xl sm:px-4 sm:py-3"
                       >
                         {locating && pendingAction === "check_in" ? L.liveCaptureLocating : L.btnSubmitCheckIn}
                       </button>
@@ -677,13 +677,13 @@ export default function AttendancePanel({ embedded = false }: AttendancePanelPro
                           !canSubmitCheckOut
                         }
                         onClick={() => void beginMarkAttendance("check_out")}
-                        className="inline-flex min-h-[3rem] items-center justify-center rounded-xl border-2 border-indigo-200/90 bg-white px-4 py-3 text-center text-sm font-semibold text-indigo-900 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50/50 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+                        className="inline-flex min-h-[2.75rem] items-center justify-center rounded-lg border-2 border-indigo-200/90 bg-white px-3 py-2.5 text-center text-sm font-semibold text-indigo-900 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50/50 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:min-h-[3rem] sm:rounded-xl sm:px-4 sm:py-3"
                       >
                         {locating && pendingAction === "check_out" ? L.liveCaptureLocating : L.btnSubmitCheckOut}
                       </button>
                     </div>
                     {message && (
-                      <p className="mt-4 rounded-xl border border-slate-200/90 bg-slate-50/90 px-3 py-2 text-xs leading-relaxed text-slate-800">
+                      <p className="mt-3 rounded-lg border border-slate-200/90 bg-slate-50/90 px-3 py-2 text-xs leading-relaxed text-slate-800 sm:mt-4 sm:rounded-xl">
                         {message}
                       </p>
                     )}

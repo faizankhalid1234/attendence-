@@ -57,7 +57,7 @@ export default function CompanyTeamAttendance() {
   return (
     <div className="relative">
       {/* Role ribbon — same card, top band */}
-      <div className="relative overflow-hidden border-b border-white/15 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 px-6 py-6 text-white sm:px-8 sm:py-7">
+      <div className="relative overflow-hidden border-b border-white/15 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 px-4 py-5 text-white sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute -right-16 top-0 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
@@ -84,7 +84,7 @@ export default function CompanyTeamAttendance() {
       </div>
 
       {/* Main body — one surface */}
-      <div className="relative bg-gradient-to-b from-slate-50 via-white to-emerald-50/20 px-6 py-7 sm:px-8 sm:py-8 dark:from-zinc-900 dark:via-zinc-950 dark:to-emerald-950/10">
+      <div className="relative bg-gradient-to-b from-slate-50 via-white to-emerald-50/20 px-4 py-5 sm:px-6 sm:py-6 dark:from-zinc-900 dark:via-zinc-950 dark:to-emerald-950/10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Attendance & team</p>
@@ -126,12 +126,6 @@ export default function CompanyTeamAttendance() {
         {error && (
           <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
             {error}
-          </p>
-        )}
-
-        {!members.length && !error && (
-          <p className="mt-8 rounded-xl border border-dashed border-slate-200 bg-white/60 py-12 text-center text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-400">
-            {L.coNoMembers}
           </p>
         )}
 
