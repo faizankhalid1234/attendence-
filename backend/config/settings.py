@@ -1,7 +1,7 @@
 import hashlib
 import os
 import re
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -87,16 +87,24 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {}
-}
+DATABASES = {"default": {}}
 
-db_url = os.getenv("DATABASE_URL", "")
+db_url = (os.getenv("DATABASE_URL", "") or "").strip()
 if db_url:
     parsed = urlparse(db_url)
+    parsed_name = unquote((parsed.path or "").lstrip("/"))
+    override_name = _env_first("PGDATABASE", "POSTGRES_DB", "DB_NAME")
+    db_name = (override_name or parsed_name).strip()
+    # PostgreSQL identifier limit (Django validates this before connecting).
+    # Some platforms occasionally inject a malformed DATABASE_URL path; in that case
+    # allow explicit DB-name env vars to take precedence.
+    if len(db_name) > 63:
+        fallback_name = (parsed_name[:63]).strip()
+        db_name = fallback_name
+
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": parsed.path.lstrip("/"),
+        "NAME": db_name,
         "USER": parsed.username,
         "PASSWORD": parsed.password,
         "HOST": parsed.hostname,
